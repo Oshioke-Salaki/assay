@@ -38,7 +38,11 @@ export function WalletPicker({
           disabled={busy}
           onClick={() => onPick(o.uid)}
         >
-          {o.icon ? <img src={o.icon} alt="" width={18} height={18} style={{ borderRadius: 4 }} /> : null}
+          {o.icon ? (
+            // Wallet icons are data: URIs the wallet itself announces; next/image cannot optimise them.
+            // biome-ignore lint/performance/noImgElement: data URI from the wallet
+            <img src={o.icon} alt="" width={18} height={18} style={{ borderRadius: 4 }} />
+          ) : null}
           {busy ? "Connecting…" : `Connect ${o.name}`}
         </button>
       ))}

@@ -30,7 +30,9 @@ function walletMocks({ mode, account }) {
           if (behaviour === "error")
             throw Object.assign(new Error("Internal JSON-RPC error."), { code: -32603 });
           connected = true;
-          setTimeout(() => listeners.accountsChanged?.forEach((f) => f([account])), 0);
+          setTimeout(() => {
+            for (const f of listeners.accountsChanged ?? []) f([account]);
+          }, 0);
           return method === "eth_requestAccounts"
             ? [account]
             : [
@@ -55,8 +57,14 @@ function walletMocks({ mode, account }) {
         }
         throw Object.assign(new Error(`mock: ${method} not supported`), { code: 4200 });
       },
-      on: (e, f) => ((listeners[e] ??= []).push(f), provider),
-      removeListener: (e, f) => ((listeners[e] = (listeners[e] ?? []).filter((g) => g !== f)), provider),
+      on: (e, f) => {
+        listeners[e] = [...(listeners[e] ?? []), f];
+        return provider;
+      },
+      removeListener: (e, f) => {
+        listeners[e] = (listeners[e] ?? []).filter((g) => g !== f);
+        return provider;
+      },
     };
     const info = {
       uuid: crypto.randomUUID(),

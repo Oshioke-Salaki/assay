@@ -79,7 +79,11 @@ export function useWallet() {
     const list = named.length > 0 ? named : connectors;
     const seen = new Set<string>();
     return list
-      .filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)))
+      .filter((c) => {
+        if (seen.has(c.name)) return false;
+        seen.add(c.name);
+        return true;
+      })
       .map((c) => ({ uid: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon }));
   }, [connectors]);
 
