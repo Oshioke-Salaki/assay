@@ -6,6 +6,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { DB } from "../db.js";
 import { log } from "./log.js";
 
+/**
+ * Multicall chunking for the paid gateway. viem's `batchSize` counts raw calldata bytes; ABI and hex
+ * encoding inflate that about 12x in the JSON body. 4 KB of calldata comes to about 50 KB per request,
+ * under the gateway's 128 KiB cap with room to spare (test/buy.test.ts measures it).
+ */
+export const PAID_MULTICALL_BATCH = 4 * 1024;
+
 export class BudgetExceeded extends Error {
   constructor(spent: number, cap: number) {
     super(`Daily budget for paid services reached ($${spent.toFixed(2)} of $${cap.toFixed(2)})`);
@@ -66,12 +73,44 @@ export function createPayingFetch(opts: {
     ).s;
   };
 
-  return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+  // One paid request at a time: each needs its own settlement from this wallet, and the gateway
+  // settles them in turn, so parallel requests only queue up behind each other and time out.
+  let queue: Promise<unknown> = Promise.resolve();
+  const serial = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = queue.then(task, task);
+    queue = run.catch(() => undefined);
+    return run;
+  };
+
+  return ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+    serial(() => payOnce(input, init))) as typeof fetch;
+
+  async function payOnce(input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> {
     const spent = spentToday();
     if (spent + opts.pricePerCallUsd > opts.dailyCapUsd + 1e-9)
       throw new BudgetExceeded(spent, opts.dailyCapUsd);
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const res = await paying(input, init);
+    let res: Response;
+    try {
+      res = await paying(input, init);
+    } catch (err) {
+      // Record the failed attempt too, so the ledger explains every call, not only the paid ones.
+      const reason = String(
+        err instanceof Error && err.cause ? `${err.message}: ${String(err.cause)}` : err,
+      ).slice(0, 300);
+      insert.run(
+        Math.floor(Date.now() / 1000),
+        opts.service,
+        url.slice(0, 300),
+        0,
+        0,
+        null,
+        account.address.toLowerCase(),
+        reason,
+      );
+      log.warn("paid service call failed", { service: opts.service, reason });
+      throw err;
+    }
     const tx = readSettlementTx(res);
     insert.run(
       Math.floor(Date.now() / 1000),
@@ -85,7 +124,7 @@ export function createPayingFetch(opts: {
     );
     if (tx) log.info("paid service call", { service: opts.service, usd: opts.pricePerCallUsd, tx });
     return res;
-  }) as typeof fetch;
+  }
 }
 
 /** The settlement transaction from an x402 v2 PAYMENT-RESPONSE (or v1 X-PAYMENT-RESPONSE) header. */

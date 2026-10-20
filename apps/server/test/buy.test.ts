@@ -1,5 +1,8 @@
+import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
+import { createPublicClient, http, pad } from "viem";
+import { celo } from "viem/chains";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BudgetExceeded, createPayingFetch, readSettlementTx } from "../src/lib/buy.js";
+import { BudgetExceeded, createPayingFetch, PAID_MULTICALL_BATCH, readSettlementTx } from "../src/lib/buy.js";
 import { memoryDb } from "./helpers.js";
 
 const KEY = `0x${"33".repeat(32)}` as const;
@@ -172,5 +175,87 @@ describe("createPayingFetch", () => {
     expect(readSettlementTx(settled())).toBe(TX);
     expect(readSettlementTx(new Response("x"))).toBeNull();
     expect(readSettlementTx(new Response("x", { headers: { "payment-response": "%%%" } }))).toBeNull();
+  });
+});
+
+describe("paid request queue", () => {
+  it("sends paid requests one at a time even when callers fire them together", async () => {
+    const db = memoryDb();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const paid = new Request(i, init).headers.has("payment-signature");
+      if (!paid) return challenge("10000");
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 20));
+      inFlight--;
+      return settled();
+    });
+    const pay = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "s",
+      pricePerCallUsd: 0.01,
+      dailyCapUsd: 1,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const results = await Promise.all(
+      [1, 2, 3, 4].map(() => pay("https://gateway.test/x", { method: "POST", body: "{}" })),
+    );
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    expect(maxInFlight).toBe(1);
+  });
+
+  it("keeps going after a failed paid call", async () => {
+    const db = memoryDb();
+    let n = 0;
+    const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      n++;
+      if (n === 1) throw new Error("network down");
+      return new Request(i, init).headers.has("payment-signature") ? settled() : challenge("10000");
+    });
+    const pay = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "s",
+      pricePerCallUsd: 0.01,
+      dailyCapUsd: 1,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(pay("https://gateway.test/x")).rejects.toThrow();
+    expect((await pay("https://gateway.test/x", { method: "POST", body: "{}" })).status).toBe(200);
+  });
+});
+
+describe("paid multicall chunking", () => {
+  it("keeps every request body under the gateway's 128 KiB cap, even for a 1,000-address batch", async () => {
+    const sizes: number[] = [];
+    const fetchFn = (async (_i: unknown, init?: RequestInit) => {
+      sizes.push(typeof init?.body === "string" ? init.body.length : 0);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x" }));
+    }) as unknown as typeof fetch;
+    const client = createPublicClient({
+      chain: celo,
+      transport: http("https://gateway.test", { fetchFn, retryCount: 0 }),
+      batch: { multicall: { batchSize: PAID_MULTICALL_BATCH } },
+    });
+    const addrs = Array.from(
+      { length: 1000 },
+      (_, i) => `0x${(i + 1).toString(16).padStart(40, "0")}` as `0x${string}`,
+    );
+    await client
+      .multicall({
+        allowFailure: true,
+        contracts: addrs.map((a) => ({
+          address: SELF_AGENT_REGISTRY,
+          abi: selfAgentRegistryAbi,
+          functionName: "agentKeyToAgentId" as const,
+          args: [pad(a, { size: 32 })] as const,
+        })),
+      })
+      .catch(() => {});
+    expect(sizes.length).toBeGreaterThan(1);
+    expect(Math.max(...sizes)).toBeLessThan(100_000);
   });
 });

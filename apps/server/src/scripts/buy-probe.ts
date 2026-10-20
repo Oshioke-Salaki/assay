@@ -4,11 +4,12 @@
  *
  *   pnpm --filter @assay/server exec tsx src/scripts/buy-probe.ts
  */
-import { createPublicClient, http } from "viem";
+import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
+import { createPublicClient, http, pad } from "viem";
 import { celo } from "viem/chains";
 import { openDatabase } from "../db.js";
 import { loadEnv } from "../env.js";
-import { createPayingFetch } from "../lib/buy.js";
+import { createPayingFetch, PAID_MULTICALL_BATCH } from "../lib/buy.js";
 
 try {
   process.loadEnvFile();
@@ -48,9 +49,32 @@ try {
 } catch (e) {
   console.log("FAILED:", String(e).slice(0, 800));
 }
+if (process.argv.includes("--multicall")) {
+  // The production enrichment shape: 300 Self Agent ID lookups, chunked for the gateway.
+  const mc = createPublicClient({
+    chain: celo,
+    transport: http(url, { fetchFn, timeout: 120_000, retryCount: 0 }),
+    batch: { multicall: { batchSize: PAID_MULTICALL_BATCH } },
+  });
+  const addrs = Array.from(
+    { length: 300 },
+    (_, i) => `0x${(i + 1).toString(16).padStart(40, "0")}` as `0x${string}`,
+  );
+  const res = await mc.multicall({
+    allowFailure: true,
+    contracts: addrs.map((a) => ({
+      address: SELF_AGENT_REGISTRY,
+      abi: selfAgentRegistryAbi,
+      functionName: "agentKeyToAgentId" as const,
+      args: [pad(a, { size: 32 })] as const,
+    })),
+  });
+  const ok = res.filter((r) => r.status === "success").length;
+  console.log(
+    `multicall: ${res.length} lookups, ${ok} succeeded${ok < res.length ? `, first error: ${String((res.find((r) => r.status === "failure") as { error?: unknown })?.error).slice(0, 300)}` : ""}`,
+  );
+}
 console.log(
-  db
-    .prepare("SELECT service, status, usd, tx_hash AS tx, note FROM paid_calls ORDER BY id DESC LIMIT 3")
-    .all(),
+  db.prepare("SELECT service, status, usd, tx_hash AS tx FROM paid_calls ORDER BY id DESC LIMIT 6").all(),
 );
 db.close();

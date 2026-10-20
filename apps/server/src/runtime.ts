@@ -12,7 +12,7 @@ import type { Env } from "./env.js";
 import { REGISTRY_CURSOR, RegistryIndexer } from "./indexer/registry.js";
 import { SETTLEMENT_CURSOR, SettlementIndexer } from "./indexer/settlements.js";
 import { SqdClient, sleep } from "./indexer/sqd.js";
-import { createPayingFetch } from "./lib/buy.js";
+import { createPayingFetch, PAID_MULTICALL_BATCH } from "./lib/buy.js";
 import { log } from "./lib/log.js";
 
 export interface Runtime {
@@ -56,23 +56,27 @@ export function createRuntime(env: Env): Runtime {
   });
   // Enrichment sends large multicalls. With a buy payer key they go to Chainstack through the
   // buy gateway, one paid JSON-RPC batch per round, under a daily cap; otherwise to the free RPC.
+  // With a buy payer key, enrichment reads go to Chainstack through the buy gateway: one paid
+  // JSON-RPC request per multicall chunk, one at a time, under a daily cap. If a paid call fails
+  // the same request falls back to the free RPC, so enrichment never stalls on the gateway.
   const enrichRpc = env.BUY_PAYER_KEY
     ? (createPublicClient({
         chain: celo,
-        // The gateway caps request bodies at 128 KiB. No JSON-RPC batching, and multicall chunks of
-        // 16 KB of calldata (about 32 KB as hex), so every paid request stays far below the cap.
-        transport: http(env.BUY_CHAINSTACK_URL, {
-          timeout: 45_000,
-          retryCount: 0,
-          fetchFn: createPayingFetch({
-            db,
-            privateKey: env.BUY_PAYER_KEY,
-            service: "chainstack-celo-rpc",
-            pricePerCallUsd: 0.01,
-            dailyCapUsd: env.BUY_DAILY_CAP_USD,
+        transport: fallback([
+          http(env.BUY_CHAINSTACK_URL, {
+            timeout: 120_000,
+            retryCount: 0,
+            fetchFn: createPayingFetch({
+              db,
+              privateKey: env.BUY_PAYER_KEY,
+              service: "chainstack-celo-rpc",
+              pricePerCallUsd: 0.01,
+              dailyCapUsd: env.BUY_DAILY_CAP_USD,
+            }),
           }),
-        }),
-        batch: { multicall: { batchSize: 16 * 1024 } },
+          http(env.RPC_URL, { timeout: 20_000, retryCount: 2 }),
+        ]),
+        batch: { multicall: { batchSize: PAID_MULTICALL_BATCH } },
       }) as PublicClient)
     : rpc;
   const enricher = new Enricher(
