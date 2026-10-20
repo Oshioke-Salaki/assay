@@ -1,6 +1,6 @@
 # @assay/mcp
 
-An MCP server that lets an AI agent check a Celo x402 seller or ERC-8004 agent with [Assay](https://assay-amber.vercel.app) before it pays.
+An MCP server that lets an AI agent check a Celo x402 seller or ERC-8004 agent with [Assay](https://assayscore.xyz) before it pays.
 
 ## Add it
 

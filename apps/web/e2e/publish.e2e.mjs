@@ -3,14 +3,14 @@
  * signing and sending done by a real key in Node (E2E_PRIVATE_KEY). Every failed request and
  * console error is reported, so a "Failed to fetch" names the request that failed.
  *
- *   E2E_PRIVATE_KEY=0x… BASE=https://assay-amber.vercel.app node e2e/publish.e2e.mjs
+ *   E2E_PRIVATE_KEY=0x… BASE=https://assayscore.xyz node e2e/publish.e2e.mjs
  */
 import { chromium } from "playwright-core";
 import { createWalletClient, http, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
 
-const BASE = process.env.BASE ?? "https://assay-amber.vercel.app";
+const BASE = process.env.BASE ?? "https://assayscore.xyz";
 const SUBJECT = process.env.SUBJECT ?? "0x5df8ae2b963165b735b18ca86b1ea448d2aa032c";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const key = process.env.E2E_PRIVATE_KEY;

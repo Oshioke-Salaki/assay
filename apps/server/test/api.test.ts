@@ -302,6 +302,25 @@ describe("internal key", () => {
       429,
     );
   });
+
+  it("limits each visitor the web app relays, separately from the relay itself", async () => {
+    const key = "k".repeat(32);
+    const { app } = build({ FREE_RATE_PER_MIN: "2", INTERNAL_API_KEY: key });
+    const relay = { "x-forwarded-for": "203.0.113.9", "x-assay-internal": key };
+    const a = { ...relay, "x-assay-client-ip": "198.51.100.1" };
+    const b = { ...relay, "x-assay-client-ip": "198.51.100.2" };
+    expect((await get(app, "/v1/economy", a)).status).toBe(200);
+    expect((await get(app, "/v1/economy", a)).status).toBe(200);
+    expect((await get(app, "/v1/economy", a)).status).toBe(429);
+    expect((await get(app, "/v1/economy", b)).status).toBe(200);
+    // Page renders from the same relay are still not limited.
+    for (let i = 0; i < 4; i++) expect((await get(app, "/v1/economy", relay)).status).toBe(200);
+    // Without the key, the header is ignored: a client cannot pick its own identity.
+    const spoof = { "x-forwarded-for": "198.51.100.3" };
+    expect((await get(app, "/v1/economy", { ...spoof, "x-assay-client-ip": "1.1.1.1" })).status).toBe(200);
+    expect((await get(app, "/v1/economy", { ...spoof, "x-assay-client-ip": "1.1.1.2" })).status).toBe(200);
+    expect((await get(app, "/v1/economy", { ...spoof, "x-assay-client-ip": "1.1.1.3" })).status).toBe(429);
+  });
 });
 
 describe("wFIAT prices", () => {

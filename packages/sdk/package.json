@@ -4,7 +4,7 @@
   "description": "Check Celo x402 sellers with Assay before paying them. Includes a drop-in guard for any x402 fetch client.",
   "license": "MIT",
   "author": "Oshioke Salaki",
-  "homepage": "https://assay-amber.vercel.app",
+  "homepage": "https://assayscore.xyz",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Oshioke-Salaki/assay.git",

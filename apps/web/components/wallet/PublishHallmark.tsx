@@ -8,7 +8,6 @@ import { useState } from "react";
 import { formatUnits } from "viem";
 import styles from "@/components/app.module.css";
 import { useToast } from "@/components/Toaster";
-import { API_PUBLIC } from "@/lib/api";
 import { txUrl } from "@/lib/format";
 import { erc20BalanceAbi, REGISTRY_ADDRESS, registryAbi } from "./config";
 import { WalletProviders } from "./Providers";
@@ -90,7 +89,8 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       const account = w.address;
 
       setStep({ kind: "working", text: "Checking your stablecoin balances…" });
-      const url = `${API_PUBLIC}/v1/attest/${subject}`;
+      // Same-origin: next.config rewrites /x402/* to the Assay API.
+      const url = `/x402/v1/attest/${subject}`;
       const offers = await priceList(url);
       const balances = await Promise.all(
         offers.map((o) =>

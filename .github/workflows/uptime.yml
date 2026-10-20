@@ -32,7 +32,7 @@ jobs:
         continue-on-error: true
         env:
           API_URL: ${{ vars.ASSAY_API_URL || 'https://api-production-63cc.up.railway.app' }}
-          WEB_URL: ${{ vars.ASSAY_WEB_URL || 'https://assay-amber.vercel.app' }}
+          WEB_URL: ${{ vars.ASSAY_WEB_URL || 'https://assayscore.xyz' }}
         run: |
           set -o pipefail
           node scripts/uptime.mjs | tee report.md

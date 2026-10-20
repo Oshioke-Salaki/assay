@@ -439,7 +439,11 @@ export function snapshotCache(version: () => number, maxEntries: number): Middle
   };
 }
 
-/** Fixed-window limiter per client IP. Memory is swept every window. */
+/**
+ * Fixed-window limiter per client IP. Memory is swept every window. Assay's own web server sends
+ * the internal key: its page renders are not limited, but when it relays a visitor's request it
+ * names the visitor in `x-assay-client-ip`, and that visitor is limited like any other.
+ */
 export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHandler {
   const hits = new Map<string, { n: number; reset: number }>();
   const trusted = (c: Context) => {
@@ -453,13 +457,14 @@ export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHa
   };
   let sweep = Date.now() + 60_000;
   return async (c, next) => {
-    if (trusted(c)) return next();
+    const relayed = trusted(c) ? c.req.header("x-assay-client-ip")?.trim() : undefined;
+    if (trusted(c) && !relayed) return next();
     const now = Date.now();
     if (now > sweep) {
       for (const [k, v] of hits) if (v.reset <= now) hits.delete(k);
       sweep = now + 60_000;
     }
-    const ip = clientIp(c);
+    const ip = relayed ? `relayed:${relayed.slice(0, 64)}` : clientIp(c);
     const entry = hits.get(ip);
     if (!entry || entry.reset <= now) {
       hits.set(ip, { n: 1, reset: now + 60_000 });

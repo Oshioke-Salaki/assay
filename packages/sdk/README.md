@@ -1,6 +1,6 @@
 # @assay/sdk
 
-Check a Celo x402 seller with [Assay](https://assay-amber.vercel.app) before your agent pays it.
+Check a Celo x402 seller with [Assay](https://assayscore.xyz) before your agent pays it.
 
 Assay reads every x402 settlement on Celo, nets out payment loops and payers the seller funded itself, and rates what is left. A seller that pays itself in a circle is rated on what it really earns, not on what it moved.
 

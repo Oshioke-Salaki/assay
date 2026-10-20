@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { keccak256, stringToBytes, toHex } from "viem";
 import styles from "@/components/app.module.css";
 import { useToast } from "@/components/Toaster";
-import { API_PUBLIC } from "@/lib/api";
 import { date, short, txUrl, usd } from "@/lib/format";
 import { WalletProviders } from "./Providers";
 import { useWallet, walletErrorMessage } from "./useWallet";
@@ -66,7 +65,7 @@ function Inner({ agentId }: { agentId: string }) {
     let cancelled = false;
     setLoaded(null);
     setLoadError(null);
-    fetch(`${API_PUBLIC}/v1/agents/${agentId}/payments/${w.address}`)
+    fetch(`/api/assay/v1/agents/${agentId}/payments/${w.address}`)
       .then(async (r) => {
         if (!r.ok)
           throw new Error(
@@ -91,7 +90,7 @@ function Inner({ agentId }: { agentId: string }) {
   async function checkPasted(): Promise<string> {
     const tx = pasted.trim();
     if (!/^0x[0-9a-fA-F]{64}$/.test(tx)) throw new Error("A transaction hash is 0x and 64 hex characters.");
-    const r = await fetch(`${API_PUBLIC}/v1/proof/${tx}`);
+    const r = await fetch(`/api/assay/v1/proof/${tx}`);
     if (!r.ok) throw new Error("Could not check that transaction on Celo right now.");
     const p = (await r.json()) as ProofResponse;
     if (!p.ok) {

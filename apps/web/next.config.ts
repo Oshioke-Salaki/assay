@@ -19,6 +19,11 @@ const config: NextConfig = {
       },
     ];
   },
+  // Paid calls from the browser go through the site's own origin, so they work on every domain the
+  // site is served from without the API listing each one for CORS. Payment headers pass through.
+  async rewrites() {
+    return [{ source: "/x402/v1/:route(check|attest)/:address", destination: `${api}/v1/:route/:address` }];
+  },
   env: { NEXT_PUBLIC_ASSAY_API: api },
 };
 

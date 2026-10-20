@@ -4,7 +4,7 @@
   "description": "MCP server for Assay: check Celo x402 sellers and ERC-8004 agents before paying them",
   "license": "MIT",
   "author": "Oshioke Salaki",
-  "homepage": "https://assay-amber.vercel.app",
+  "homepage": "https://assayscore.xyz",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Oshioke-Salaki/assay.git",
