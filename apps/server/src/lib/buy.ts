@@ -1,4 +1,5 @@
 import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { ExactEvmSchemeV1 } from "@x402/evm/v1";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -27,17 +28,28 @@ export function createPayingFetch(opts: {
   const account = privateKeyToAccount(opts.privateKey);
   const maxUnits = BigInt(Math.round(opts.pricePerCallUsd * 1e6));
   // Only ever accept a requirement priced at or under the quoted price, in a 6-decimal dollar token.
+  // Only ever accept a requirement priced at or under the quoted price. x402 v2 states the price as
+  // `amount`; v1 (which the buy gateway speaks) as `maxAmountRequired`.
+  const priceOf = (r: unknown): bigint | null => {
+    const raw =
+      (r as { amount?: unknown; maxAmountRequired?: unknown }).amount ??
+      (r as { maxAmountRequired?: unknown }).maxAmountRequired;
+    try {
+      return typeof raw === "string" || typeof raw === "number" ? BigInt(raw) : null;
+    } catch {
+      return null;
+    }
+  };
   const client = new x402Client((_v, reqs) => {
     const ok = reqs.filter((r) => {
-      try {
-        return BigInt(r.amount) <= maxUnits;
-      } catch {
-        return false;
-      }
+      const p = priceOf(r);
+      return p !== null && p <= maxUnits;
     });
     if (ok.length === 0) throw new Error(`${opts.service} asked more than $${opts.pricePerCallUsd} per call`);
     return ok[0]!;
-  }).register("eip155:42220", new ExactEvmScheme(account));
+  })
+    .register("eip155:42220", new ExactEvmScheme(account))
+    .registerV1("celo", new ExactEvmSchemeV1(account));
   const base = opts.fetchImpl ?? fetch;
   const paying = wrapFetchWithPayment(base, client);
   const insert = opts.db.prepare(

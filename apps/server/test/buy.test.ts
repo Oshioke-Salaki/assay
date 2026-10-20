@@ -44,7 +44,73 @@ const settled = () =>
 
 afterEach(() => vi.restoreAllMocks());
 
+function challengeV1(maxAmountRequired: string) {
+  return new Response(
+    JSON.stringify({
+      x402Version: 1,
+      accepts: [
+        {
+          scheme: "exact",
+          network: "celo",
+          maxAmountRequired,
+          resource: "https://gateway.test/chainstack/celo",
+          description: "rpc",
+          mimeType: "application/json",
+          payTo: "0x20faAca5F980E29639A0FCC6dcA6988E18ed333B",
+          maxTimeoutSeconds: 60,
+          asset: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+          extra: { name: "USDC", version: "2" },
+        },
+      ],
+    }),
+    { status: 402, headers: { "content-type": "application/json" } },
+  );
+}
+
+const settledV1 = () =>
+  new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }), {
+    status: 200,
+    headers: {
+      "x-payment-response": Buffer.from(
+        JSON.stringify({ success: true, transaction: TX, network: "celo" }),
+      ).toString("base64"),
+    },
+  });
+
 describe("createPayingFetch", () => {
+  it("pays an x402 v1 challenge (the buy gateway's dialect) and records it", async () => {
+    const db = memoryDb();
+    const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const h = new Request(i, init).headers;
+      return h.has("x-payment") ? settledV1() : challengeV1("10000");
+    });
+    const pay = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "chainstack",
+      pricePerCallUsd: 0.01,
+      dailyCapUsd: 1,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const res = await pay("https://gateway.test/chainstack/celo", { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    expect(db.prepare("SELECT tx_hash FROM paid_calls").all()).toEqual([{ tx_hash: TX }]);
+  });
+
+  it("refuses a v1 challenge priced above the quote", async () => {
+    const db = memoryDb();
+    const fetchImpl = vi.fn(async () => challengeV1("50000"));
+    const pay = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "chainstack",
+      pricePerCallUsd: 0.01,
+      dailyCapUsd: 1,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(pay("https://gateway.test/x")).rejects.toThrow();
+  });
+
   it("pays a quoted challenge, then records the settlement as proof", async () => {
     const db = memoryDb();
     const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) => {

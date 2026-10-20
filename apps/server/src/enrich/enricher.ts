@@ -124,6 +124,13 @@ export class Enricher {
         args: [pad(a, { size: 32 })] as const,
       })),
     });
+    // allowFailure turns a transport error into per-call failures; if every lookup failed, say why
+    // instead of silently recording "no human" for the whole batch.
+    if (ids.length > 0 && ids.every((r) => r.status === "failure")) {
+      const reason = ids[0]?.status === "failure" ? String(ids[0].error).slice(0, 300) : "unknown";
+      log.warn("self lookup batch failed", { addresses: addresses.length, reason });
+      return 0;
+    }
     const found = addresses
       .map((a, i) => ({ address: a, id: ids[i]?.status === "success" ? (ids[i]!.result as bigint) : 0n }))
       .filter((x) => x.id > 0n);
