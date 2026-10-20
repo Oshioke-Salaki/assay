@@ -292,7 +292,11 @@ export function createApp(deps: AppDeps): Hono {
         { name: "web", endpoint: env.WEB_URL },
         { name: "x402-check", endpoint: `${env.PUBLIC_URL}/v1/check/{address}`, version: "1" },
         { name: "x402-attest", endpoint: `${env.PUBLIC_URL}/v1/attest/{address}`, version: "1" },
-        { name: "MCP", endpoint: "npx -y @assay/mcp", version: "1" },
+        {
+          name: "MCP",
+          endpoint: "https://github.com/Oshioke-Salaki/assay/tree/main/packages/mcp",
+          version: "1",
+        },
       ],
       x402Support: true,
       active: true,

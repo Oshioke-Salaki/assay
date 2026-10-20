@@ -184,7 +184,8 @@ try {
             <code>assay_report</code>, <code>assay_find_agents</code> and <code>assay_economy</code>.
           </p>
           <Code label="Add the MCP server to Claude Code">{`
-claude mcp add assay --env ASSAY_URL=${api} -- npx -y @assay/mcp
+git clone https://github.com/Oshioke-Salaki/assay && cd assay && pnpm install && pnpm -r --filter @assay/mcp... build
+claude mcp add assay --env ASSAY_URL=${api} -- node $(pwd)/packages/mcp/dist/index.js
           `}</Code>
         </Panel>
 

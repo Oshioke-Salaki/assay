@@ -55,7 +55,10 @@ cd contracts && forge test     # AssayRegistry, including a signature made by th
 | --- | --- |
 | Agent wallet (ERC-8004 identity, sender of every tagged transaction, x402 PayTo) | `0x3d5ea1ce6f3Fa5FAe7A38b77F569570b3ea9a9a4` |
 | Attester (signs scores, sends nothing) | `0x8d9Ad56256a142f63a7e1C4aFCbcC17312939a46` |
-| AssayRegistry | set after deployment |
+| AssayRegistry ([Sourcify, exact match](https://sourcify.dev/server/repo-ui/42220/0xf6679308af9ff1ffc11a968dfd1ea5882152e29f)) | `0xf6679308af9ff1ffc11a968dfd1ea5882152e29f` |
+| ERC-8004 agent | [#9981](https://8004scan.io/agents/celo/9981) |
+| API | https://api-production-63cc.up.railway.app |
+| Web | https://assay-amber.vercel.app |
 | ERC-8021 attribution tag | `celo_27fe67eb1be5` |
 
 MIT licensed.

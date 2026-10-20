@@ -1,6 +1,6 @@
 # API
 
-Base URL: wherever the server is deployed (`PUBLIC_URL`). All responses are JSON. Errors are `{ "error": "<code>", "message": "<sentence>" }`.
+Base URL: `https://api-production-63cc.up.railway.app` (or wherever you deploy your own server). All responses are JSON. Errors are `{ "error": "<code>", "message": "<sentence>" }`.
 
 ## Paid (x402 on Celo, USA₮ · USDC · USD₮)
 
@@ -66,7 +66,8 @@ const guarded = withAssayGuard(fetch, payingFetch, { baseUrl: "https://your-assa
 ## MCP
 
 ```sh
-claude mcp add assay --env ASSAY_URL=https://your-assay-server -- npx -y @assay/mcp
+git clone https://github.com/Oshioke-Salaki/assay && cd assay && pnpm install && pnpm -r --filter @assay/mcp... build
+claude mcp add assay --env ASSAY_URL=https://api-production-63cc.up.railway.app -- node $(pwd)/packages/mcp/dist/index.js
 ```
 
 Tools: `assay_check_seller`, `assay_report`, `assay_find_agents`, `assay_economy`.

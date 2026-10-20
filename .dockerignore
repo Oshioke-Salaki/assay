@@ -1,0 +1,16 @@
+**/node_modules
+**/.next
+**/dist
+apps/server/data
+**/*.db
+**/*.db-*
+**/.env
+**/.env.*
+!**/.env.example
+contracts
+.taste-skill
+apps/web/.taste-skill
+.agents
+.claude
+.vercel
+.git

@@ -2,7 +2,7 @@
 /**
  * Assay MCP server (stdio).
  *
- *   ASSAY_URL=https://your-assay-server npx -y @assay/mcp
+ *   ASSAY_URL=https://api-production-63cc.up.railway.app node packages/mcp/dist/index.js
  *
  * Free endpoints are used by default. To use the paid endpoints (signed scores,
  * no rate limit), pass a paying fetch through the library API instead; this CLI
