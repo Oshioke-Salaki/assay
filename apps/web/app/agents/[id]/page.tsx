@@ -1,3 +1,4 @@
+import { verdictFor } from "@assay/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -39,7 +40,8 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       </AppShell>
     );
   }
-  const { agent, assessment: a, check, reviews } = d;
+  const { agent, assessment: a, reviews } = d;
+  const check = verdictFor(a);
   const live = reviews.filter((r) => !r.revoked);
   const paid = live.filter((r) => r.tier !== "unverified");
   const avg = (rs: typeof live) => (rs.length ? rs.reduce((n, r) => n + r.value, 0) / rs.length : null);

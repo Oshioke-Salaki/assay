@@ -8,6 +8,7 @@ import { API_PUBLIC } from "@/lib/api";
 import { date, short, txUrl, usd } from "@/lib/format";
 import { WalletProviders } from "./Providers";
 import { useWallet, walletErrorMessage } from "./useWallet";
+import { WalletPicker } from "./WalletPicker";
 
 interface Payment {
   txHash: `0x${string}`;
@@ -157,18 +158,14 @@ function Inner({ agentId }: { agentId: string }) {
     return (
       <div className={styles.form}>
         <p>Only wallets that paid this agent can review it. Connect the wallet you paid from.</p>
-        <div className={styles.actions}>
-          <button
-            type="button"
-            className="btn btn--ink"
-            disabled={!w.hasInjected || w.connecting}
-            onClick={() =>
-              w.connect().catch((e: unknown) => setState({ kind: "error", text: walletErrorMessage(e) }))
-            }
-          >
-            {w.connecting ? "Connecting…" : w.hasInjected ? "Connect a wallet" : "No wallet in this browser"}
-          </button>
-        </div>
+        <WalletPicker
+          options={w.options}
+          busy={w.connecting}
+          onPick={(uid) => {
+            setState({ kind: "idle" });
+            w.connect(uid).catch((e: unknown) => setState({ kind: "error", text: walletErrorMessage(e) }));
+          }}
+        />
         {state.kind === "error" ? (
           <p className={`${styles.notice} ${styles.noticeBad}`}>{state.text}</p>
         ) : null}

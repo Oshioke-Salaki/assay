@@ -11,6 +11,7 @@ import { txUrl } from "@/lib/format";
 import { erc20BalanceAbi, REGISTRY_ADDRESS, registryAbi } from "./config";
 import { WalletProviders } from "./Providers";
 import { useWallet, walletErrorMessage } from "./useWallet";
+import { WalletPicker } from "./WalletPicker";
 
 const PRICE_UNITS = 10_000n; // $0.01 in 6-decimal dollar tokens
 const DOLLARS = TOKENS.filter((t) => t.transfer === "eip3009");
@@ -47,12 +48,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
 
   async function run() {
     try {
-      if (!w.isConnected) {
-        setStep({ kind: "working", text: "Connecting your wallet…" });
-        await w.connect();
-        setStep({ kind: "idle" });
-        return;
-      }
+      if (!w.isConnected) return;
       await w.ensureCelo();
       const client = w.walletClient;
       const pub = w.publicClient;
@@ -154,28 +150,29 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
         days.
         {rating === "NR" ? " This address is not rated yet, so contracts will read NR." : ""}
       </p>
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className="btn btn--ink"
-          onClick={run}
-          disabled={busy || (!w.hasInjected && !w.isConnected)}
-        >
-          {busy
-            ? "Working…"
-            : w.isConnected
-              ? "Pay $0.01 and publish"
-              : w.hasInjected
-                ? "Connect a wallet"
-                : "No wallet in this browser"}
-        </button>
-        {w.isConnected ? (
+      {w.isConnected ? (
+        <div className={styles.actions}>
+          <button type="button" className="btn btn--ink" onClick={run} disabled={busy}>
+            {busy ? "Working…" : "Pay $0.01 and publish"}
+          </button>
           <span className={styles.muted} style={{ alignSelf: "center" }}>
             {w.address?.slice(0, 6)}…{w.address?.slice(-4)}
             {w.address === subject ? " (this address)" : ""}
           </span>
-        ) : null}
-      </div>
+          <button type="button" className="btn btn--quiet" onClick={w.disconnect} disabled={busy}>
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <WalletPicker
+          options={w.options}
+          busy={w.connecting}
+          onPick={(uid) => {
+            setStep({ kind: "idle" });
+            w.connect(uid).catch((e: unknown) => setStep({ kind: "error", text: walletErrorMessage(e) }));
+          }}
+        />
+      )}
       <p
         role="status"
         aria-live="polite"

@@ -14,19 +14,42 @@ import {
 import { celo } from "wagmi/chains";
 import { ATTRIBUTION_TAG } from "./config";
 
-/** Plain-language messages for the wallet errors people actually hit. */
+/** Wallet error codes live on the error or anywhere down its cause chain. */
+function errorCode(err: unknown): number | undefined {
+  let e = err as { code?: unknown; cause?: unknown } | undefined;
+  for (let depth = 0; e && depth < 6; depth++) {
+    if (typeof e.code === "number") return e.code;
+    e = e.cause as typeof e;
+  }
+  return undefined;
+}
+
+/**
+ * Plain-language messages for the wallet errors people actually hit. "Cancelled" is said only for a
+ * real rejection (EIP-1193 code 4001); anything else shows the wallet's own words, so a failure is
+ * never dressed up as something the person did.
+ */
 export function walletErrorMessage(err: unknown): string {
-  const e = err as { shortMessage?: string; message?: string; name?: string; code?: number };
-  const text = `${e?.shortMessage ?? ""} ${e?.message ?? ""}`;
-  if (e?.code === 4001 || /user rejected|denied|rejected the request/i.test(text))
-    return "You cancelled it in your wallet.";
-  if (/insufficient funds|gas required exceeds/i.test(text))
+  const e = err as { shortMessage?: string; message?: string; name?: string };
+  const text = `${e?.name ?? ""} ${e?.shortMessage ?? ""} ${e?.message ?? ""}`;
+  const code = errorCode(err);
+  if (code === 4001 || /user rejected/i.test(text)) return "You cancelled it in your wallet.";
+  if (code === -32002 || /already pending/i.test(text))
+    return "Your wallet already has a request waiting. Open the wallet extension and finish or close it.";
+  if (/insufficient funds|gas required exceeds|exceeds balance/i.test(text))
     return "Not enough CELO for gas. Add a little CELO, or open this page in MiniPay, which pays gas in stablecoins.";
-  if (/chain|network/i.test(text) && /mismatch|unsupported|switch/i.test(text))
-    return "Switch your wallet to Celo mainnet and try again.";
-  if (/ProviderNotFound|no provider|window\.ethereum/i.test(text))
-    return "No wallet found in this browser. Open the page in MiniPay, MetaMask or Rabby.";
-  return e?.shortMessage ?? e?.message?.split("\n")[0] ?? "Something went wrong in the wallet.";
+  if (code === 4902 || /unrecognized chain|chain .* not (added|supported)/i.test(text))
+    return "Your wallet does not know Celo yet. Approve adding Celo mainnet when it asks, then try again.";
+  if (/ProviderNotFound|no provider|not installed/i.test(text))
+    return "No wallet found in this browser. Install MetaMask or Rabby, or open the page in MiniPay.";
+  const own = e?.shortMessage ?? e?.message?.split("\n")[0];
+  return own ? `Your wallet said: ${own}` : "Something went wrong in the wallet.";
+}
+
+export interface WalletOption {
+  uid: string;
+  name: string;
+  icon?: string;
 }
 
 /**
@@ -48,11 +71,28 @@ export function useWallet() {
     [walletClient],
   );
 
-  const connectInjected = useCallback(async () => {
-    const connector = connectors[0];
-    if (!connector) throw new Error("ProviderNotFound");
-    await connect.mutateAsync({ connector, chainId: celo.id });
-  }, [connect, connectors]);
+  // Every wallet the browser announces (EIP-6963) is its own option, so a Brave user with MetaMask
+  // picks MetaMask instead of whatever grabbed window.ethereum first. The generic "Injected"
+  // entry is only offered when nothing announced itself (MiniPay, older wallets).
+  const options = useMemo<WalletOption[]>(() => {
+    const named = connectors.filter((c) => c.id !== "injected");
+    const list = named.length > 0 ? named : connectors;
+    const seen = new Set<string>();
+    return list
+      .filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)))
+      .map((c) => ({ uid: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon }));
+  }, [connectors]);
+
+  const connectWith = useCallback(
+    async (uid?: string) => {
+      const connector = connectors.find((c) => c.uid === (uid ?? options[0]?.uid)) ?? connectors[0];
+      if (!connector) throw new Error("ProviderNotFound");
+      // No chainId here: some wallets fail the connect if asked to switch at the same time.
+      // The network is switched (or added) right before the first action instead.
+      await connect.mutateAsync({ connector });
+    },
+    [connect, connectors, options],
+  );
 
   const ensureCelo = useCallback(async () => {
     if (connection.chainId !== celo.id) await switchChain.mutateAsync({ chainId: celo.id });
@@ -64,7 +104,8 @@ export function useWallet() {
     onCelo: connection.chainId === celo.id,
     hasInjected: connectors.length > 0,
     connecting: connect.isPending,
-    connect: connectInjected,
+    connect: connectWith,
+    options,
     disconnect: () => disconnect.mutate({}),
     ensureCelo,
     walletClient: tagged,

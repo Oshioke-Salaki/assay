@@ -1,4 +1,5 @@
 import type { Flag } from "@assay/core";
+import { verdictFor } from "@assay/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -60,7 +61,10 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
       </AppShell>
     );
   }
-  const { assessment: a, check, agents } = data;
+  const { assessment: a, agents } = data;
+  // The verdict is recomputed here with the current rule, so the page is right even while the
+  // API serves an older build.
+  const check = verdictFor(a);
   const s = a.seller;
   const b = a.buyer;
   const fine = fineness(s.organicUsd, s.grossUsd);
