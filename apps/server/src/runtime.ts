@@ -10,6 +10,7 @@ import { Enricher } from "./enrich/enricher.js";
 import { FxRates } from "./enrich/fx.js";
 import type { Env } from "./env.js";
 import { REGISTRY_CURSOR, RegistryIndexer } from "./indexer/registry.js";
+import { FailoverSource, type RpcReader, RpcSource } from "./indexer/rpcsource.js";
 import { SETTLEMENT_CURSOR, SettlementIndexer } from "./indexer/settlements.js";
 import { SqdClient, sleep } from "./indexer/sqd.js";
 import { createPayingFetch, PAID_MULTICALL_BATCH } from "./lib/buy.js";
@@ -42,7 +43,8 @@ export function createRuntime(env: Env): Runtime {
     batch: { multicall: true },
   }) as PublicClient;
   const analysis = new Analysis(db);
-  const sqd = new SqdClient(env.SQD_URL);
+  // SQD first; if the portal is down, the same queries are served from Celo RPC for the tail.
+  const sqd = new FailoverSource(new SqdClient(env.SQD_URL), new RpcSource(rpc as unknown as RpcReader));
   const invalidate = () => analysis.invalidate();
   const settlements = new SettlementIndexer(db, sqd, fx, {
     fromBlock: env.INDEX_FROM_BLOCK,

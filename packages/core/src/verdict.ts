@@ -11,14 +11,15 @@ export interface CheckResult {
   reasons: string[];
 }
 
-const BLOCK_RATINGS: ReadonlySet<Rating> = new Set(["D", "CCC"]);
-const CAUTION_RATINGS: ReadonlySet<Rating> = new Set(["B", "BB", "NR"]);
+const PASS_RATINGS: ReadonlySet<Rating> = new Set(["BBB", "A", "AA", "AAA"]);
 
 /**
  * What an agent should do before paying this address.
- *  - block:   rated D/CCC, or most revenue is circular or self-funded.
- *  - caution: not rated yet (thin file), rated B/BB, or carries warnings.
+ *  - block:   most of its revenue is circular or self-funded (organic share under 50% with a
+ *             critical finding, or under 20% outright).
+ *  - caution: not proven yet. Thin file, a low score from a short or narrow history, or warnings.
  *  - pass:    BBB or better with no critical findings.
+ * A low score alone never blocks: an honest seller with three customers is new, not fraudulent.
  * An address with no x402 history at all is "caution": unknown, not bad.
  */
 export function verdictFor(a: Assessment): CheckResult {
@@ -28,15 +29,21 @@ export function verdictFor(a: Assessment): CheckResult {
   const reasons: string[] = [];
   let verdict: Verdict;
 
-  if (BLOCK_RATINGS.has(a.rating) || (critical.length > 0 && (organicShare ?? 1) < 0.5)) {
+  const dirty =
+    organicShare !== null &&
+    ((critical.length > 0 && organicShare < 0.5) || (organicShare < 0.2 && a.seller.settlements >= 5));
+
+  if (dirty) {
     verdict = "block";
     reasons.push(...critical.map((f) => f.title));
-    if (BLOCK_RATINGS.has(a.rating)) reasons.push(`Rated ${a.rating}`);
-  } else if (CAUTION_RATINGS.has(a.rating) || critical.length > 0 || warnings.length > 0) {
+    if (organicShare !== null && organicShare < 0.5)
+      reasons.push(`Only ${Math.round(organicShare * 100)}% of revenue is organic`);
+  } else if (a.rating === "NR" || !PASS_RATINGS.has(a.rating) || critical.length > 0 || warnings.length > 0) {
     verdict = "caution";
     if (a.role === "none" || a.role === "buyer") reasons.push("No x402 revenue on record");
     else if (a.rating === "NR") reasons.push("Thin file: not enough history to rate");
-    else if (CAUTION_RATINGS.has(a.rating)) reasons.push(`Rated ${a.rating}`);
+    else if (!PASS_RATINGS.has(a.rating))
+      reasons.push(`Rated ${a.rating}: too little independent history yet`);
     reasons.push(...critical.map((f) => f.title), ...warnings.map((f) => f.title));
   } else {
     verdict = "pass";

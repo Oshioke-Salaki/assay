@@ -10,7 +10,7 @@ import { type DB, getCursor, setCursor } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
 import { log } from "../lib/log.js";
 import { extractSettlements } from "./extract.js";
-import type { SqdClient, SqdQuery } from "./sqd.js";
+import type { BlockSource, SqdQuery } from "./sqd.js";
 
 export const SETTLEMENT_CURSOR = "settlements";
 
@@ -52,7 +52,7 @@ export class SettlementIndexer {
 
   constructor(
     private readonly db: DB,
-    private readonly sqd: SqdClient,
+    private readonly sqd: BlockSource,
     private readonly fx: FxRates,
     private readonly opts: {
       fromBlock?: number;

@@ -26,6 +26,12 @@ export interface SqdBlock {
 
 export type SqdQuery = Record<string, unknown> & { fromBlock: number; toBlock?: number };
 
+/** Anything that can serve finalized blocks for a portal-shaped query: the SQD portal, or RPC. */
+export interface BlockSource {
+  finalizedHead(): Promise<SqdHead>;
+  stream(query: SqdQuery): AsyncGenerator<SqdBlock>;
+}
+
 export interface SqdHead {
   number: number;
   hash: string;

@@ -30,6 +30,25 @@ describe("verdictFor", () => {
     expect(v.reasons).toEqual(["No x402 revenue on record"]);
   });
 
+  it("never blocks an honest seller just because its history is short", () => {
+    // Organic revenue from three unrelated payers over two days: a low score, but nothing wrong.
+    const s = addr("v-new-honest");
+    const flows = [0, 1, 2].map((i) => flow(addr(`v-new-c-${i}`), s, 0.3, { count: 2, days: lastDays(2) }));
+    const a = assess(new Ledger(flows), s, ctx());
+    expect(["D", "CCC", "B"]).toContain(a.rating);
+    const v = verdictFor(a);
+    expect(v.verdict).toBe("caution");
+    expect(v.reasons[0]).toMatch(/too little independent history/);
+  });
+
+  it("blocks revenue that is mostly circular even without a rating", () => {
+    const m = ["vb0", "vb1"].map(addr);
+    const flows = [flow(m[0]!, m[1]!, 50, { count: 20 }), flow(m[1]!, m[0]!, 50, { count: 20 })];
+    const v = verdictFor(assess(new Ledger(flows), m[0]!, ctx()));
+    expect(v.verdict).toBe("block");
+    expect(v.reasons).toContain("Only 0% of revenue is organic");
+  });
+
   it("is cautious about a thin file", () => {
     const s = addr("v-thin");
     const v = verdictFor(assess(new Ledger([flow(addr("v-one"), s, 1)]), s, ctx()));

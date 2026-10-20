@@ -50,9 +50,11 @@ The result is clamped to 0–100 and rounded.
 
 | Verdict | When |
 | --- | --- |
-| block | rated D or CCC, or a critical finding with organic share under 50% |
-| caution | NR (thin file, or no revenue at all), B or BB, or any warning |
+| block | most revenue is not organic: under 50% organic with a critical finding (a loop, self-funded payers), or under 20% organic outright |
+| caution | not proven yet: NR (thin file or no revenue), a score below BBB from a short or narrow history, or any warning |
 | pass | BBB or better, no critical finding |
+
+A low score alone never blocks. An honest seller with three customers is new, not fraudulent.
 
 ## Reviews
 

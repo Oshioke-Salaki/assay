@@ -74,7 +74,7 @@ export const RATING_WORDS: Record<Rating, string> = {
   BB: "Speculative",
   B: "Weak",
   CCC: "Very weak",
-  D: "Circular or self-funded",
+  D: "Poor",
   NR: "Not rated yet",
 };
 

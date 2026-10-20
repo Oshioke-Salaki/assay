@@ -9,7 +9,7 @@ import {
 import { decodeEventLog, type Hex, isHex, toEventSelector } from "viem";
 import { type DB, getCursor, setCursor } from "../db.js";
 import { log } from "../lib/log.js";
-import type { SqdBlock, SqdClient, SqdLog, SqdQuery } from "./sqd.js";
+import type { BlockSource, SqdBlock, SqdLog, SqdQuery } from "./sqd.js";
 
 export const REGISTRY_CURSOR = "erc8004";
 
@@ -106,7 +106,7 @@ export function decodeWalletMetadata(value: Hex): string | null {
 export class RegistryIndexer {
   constructor(
     private readonly db: DB,
-    private readonly sqd: SqdClient,
+    private readonly sqd: BlockSource,
     private readonly opts: { fromBlock?: number; toBlock?: number; onIngest?: () => void } = {},
   ) {}
 
