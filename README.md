@@ -15,7 +15,7 @@ On the first full pass of Celo mainnet history, Assay found 6 payment loops (the
 | Path | What it is |
 | --- | --- |
 | `packages/core` | The scoring engine: payment graph, loop detection (Tarjan SCC), funding trace, ratings, verdicts, attestation format. Pure TypeScript, no I/O. |
-| `apps/server` | Indexer (SQD Portal, finalized blocks), enrichment (Blockscout funding, Self Agent ID, ERC-8004 cards), the HTTP API with paid x402 routes, and the operator CLI. SQLite. |
+| `apps/server` | Indexer (SQD Portal, finalized blocks), enrichment (first funders from an SQD log scan, Self Agent ID, ERC-8004 cards), the HTTP API with paid x402 routes, and the operator CLI. SQLite. |
 | `apps/web` | The site: landing, economy, address reports, agents directory, payment-verified reviews, docs. Next.js 16. |
 | `packages/sdk` | `createAssay` client and `withAssayGuard`, a drop-in guard for any x402 fetch. |
 | `packages/mcp` | MCP server with four read-only tools for any agent. |

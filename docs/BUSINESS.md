@@ -29,7 +29,7 @@ A check costs Assay a database read and one signature. The Celo facilitator char
 | Settlements | SQLite with a per-day roll-up; the full Celo x402 history is a few hundred MB | Postgres behind the same `pair_days` contract once a single file is not enough; the ledger build already streams |
 | Reads | Several API processes can share one database file (WAL) | Read replicas or a cache in front of `/v1/address`; reports change at most once per finalized batch |
 | Graph size | Tarjan SCC is linear in edges; one rebuild covers the whole economy | Incremental components when the graph reaches millions of edges |
-| Enrichment | Blockscout funding lookups, rate limited and prioritised by volume | Paid RPC and indexer queries (already wired through buy) for the long tail |
+| Enrichment | One SQD log scan finds the first funder of 500 addresses per pass; Blockscout covers what it misses | Paid RPC and indexer queries (already wired through buy) for the long tail |
 | Chains | Celo | The extractor is chain-agnostic (EIP-3009 and the x402 Permit2 proxy); a chain is a dataset name, a token list and a facilitator address |
 
 ## Why this is infrastructure

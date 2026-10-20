@@ -22,7 +22,7 @@ For a seller *S*, each payer *P* is classified, first match wins:
 
 **Loops.** Money that can travel from *S* back to *S* through payments forms a strongly connected component (iterative Tarjan, no recursion limit). Within it, only net inflow counts: *offset = min(paid to S by the loop, paid by S to the loop)*, allocated across loop payers in proportion to what each paid. Two businesses that really trade with each other keep the difference; a ring that passes the same dollars round keeps nothing.
 
-**Public funders.** A funder is public when it is a contract, carries a Blockscout tag, or has at least 5,000 transactions or 20,000 token transfers, unless it buys or sells over x402 itself. Sharing a public funder (an exchange, a bridge) says nothing about two wallets.
+**Public funders.** A funder is public when it is a contract or has sent at least 5,000 transactions (the Blockscout fallback also counts a Blockscout tag or 20,000 token transfers), unless it buys or sells over x402 itself. Sharing a public funder (an exchange, a bridge) says nothing about two wallets.
 
 ## The score
 

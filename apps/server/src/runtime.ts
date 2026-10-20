@@ -44,7 +44,8 @@ export function createRuntime(env: Env): Runtime {
   }) as PublicClient;
   const analysis = new Analysis(db);
   // SQD first; if the portal is down, the same queries are served from Celo RPC for the tail.
-  const sqd = new FailoverSource(new SqdClient(env.SQD_URL), new RpcSource(rpc as unknown as RpcReader));
+  const rawSqd = new SqdClient(env.SQD_URL);
+  const sqd = new FailoverSource(rawSqd, new RpcSource(rpc as unknown as RpcReader));
   const invalidate = () => analysis.invalidate();
   const settlements = new SettlementIndexer(db, sqd, fx, {
     fromBlock: env.INDEX_FROM_BLOCK,
@@ -86,6 +87,8 @@ export function createRuntime(env: Env): Runtime {
     new Blockscout(env.BLOCKSCOUT_URL, env.BLOCKSCOUT_RPS),
     enrichRpc,
     invalidate,
+    // Full-history funding scans need the portal itself; the RPC failover only serves the tail.
+    { source: rawSqd, rpc, head: async () => (await rawSqd.finalizedHead()).number },
   );
   const cards = new AgentCards(db, env.IPFS_GATEWAY, invalidate);
   const attester =

@@ -1,9 +1,11 @@
 import { type Address, SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
 import { type PublicClient, pad } from "viem";
 import type { DB } from "../db.js";
+import type { BlockSource } from "../indexer/sqd.js";
 import { sleep } from "../indexer/sqd.js";
 import { log } from "../lib/log.js";
 import type { Blockscout } from "./blockscout.js";
+import { type FunderClassifier, fundingPass } from "./funding-scan.js";
 
 const DAY = 86_400;
 /** Funding never changes once found; addresses with no funding yet are retried weekly. */
@@ -12,8 +14,17 @@ const ERROR_RETRY = DAY;
 const HUMAN_TTL = DAY;
 const FUNDER_PROFILE_TTL = 30 * DAY;
 
+/** Funding from one forward pass over SQD logs, for many addresses at once. */
+export interface FundingScan {
+  source: BlockSource;
+  rpc: FunderClassifier;
+  head: () => Promise<number>;
+  batch?: number;
+}
+
 /**
- * Background enrichment: who funded each payer and seller (Blockscout), whether
+ * Background enrichment: who funded each payer and seller (an SQD log scan, with Blockscout as
+ * the per-address fallback), whether
  * each address is a Self-verified human agent (SelfAgentRegistry), and whether a
  * funder is a public source. Work is ordered so the busiest sellers' payers come first.
  */
@@ -25,6 +36,7 @@ export class Enricher {
     private readonly blockscout: Blockscout,
     private readonly client: PublicClient,
     private readonly onChange: () => void,
+    private readonly scan?: FundingScan,
   ) {}
 
   /** Addresses that need funding data, highest x402 volume first. */
@@ -38,12 +50,18 @@ export class Enricher {
              SELECT payee AS address, SUM(usd) AS usd FROM pair_days GROUP BY payee
            ), ranked AS (SELECT address, SUM(usd) AS usd FROM parties GROUP BY address)
            SELECT r.address FROM ranked r LEFT JOIN funding f ON f.address = r.address
-           WHERE f.address IS NULL
+           WHERE (f.address IS NULL AND NOT @scanned)
               OR (f.error IS NOT NULL AND f.fetched_at < @errorBefore)
               OR (f.error IS NULL AND f.funder IS NULL AND f.fetched_at < @unfundedBefore)
            ORDER BY r.usd DESC LIMIT @limit`,
         )
-        .all({ limit, errorBefore: now - ERROR_RETRY, unfundedBefore: now - UNFUNDED_RETRY }) as {
+        .all({
+          limit,
+          errorBefore: now - ERROR_RETRY,
+          unfundedBefore: now - UNFUNDED_RETRY,
+          // Addresses never looked up belong to the scan when there is one.
+          scanned: this.scan ? 1 : 0,
+        }) as {
         address: Address;
       }[]
     ).map((r) => r.address);
@@ -189,6 +207,31 @@ export class Enricher {
 
   /** Runs until aborted. Each pass does a bounded amount of work, then yields. */
   async run(signal: AbortSignal): Promise<void> {
+    await Promise.all([this.lookups(signal), this.scanLoop(signal)]);
+  }
+
+  /** One scan covers a whole batch of addresses; when nothing is new it waits ten minutes. */
+  private async scanLoop(signal: AbortSignal): Promise<void> {
+    const scan = this.scan;
+    if (!scan) return;
+    while (!signal.aborted) {
+      let done = 0;
+      try {
+        done = await fundingPass(this.db, scan.source, scan.rpc, {
+          batch: scan.batch ?? 500,
+          toBlock: await scan.head(),
+          signal,
+        });
+        if (done > 0) this.markDirty();
+      } catch (err) {
+        log.warn("funding scan failed", { error: String(err) });
+      }
+      this.flush();
+      await sleep(done > 0 ? 1_000 : 10 * 60_000, signal);
+    }
+  }
+
+  private async lookups(signal: AbortSignal): Promise<void> {
     while (!signal.aborted) {
       let worked = 0;
       try {
