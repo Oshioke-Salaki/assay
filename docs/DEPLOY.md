@@ -26,6 +26,28 @@ pnpm --filter @assay/web start
 
 On Vercel set the project root to `apps/web`; the install runs at the monorepo root through pnpm workspaces. Environment: `NEXT_PUBLIC_ASSAY_API`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `NEXT_PUBLIC_ATTRIBUTION_TAG`.
 
+## Monitoring
+
+`.github/workflows/uptime.yml` runs `scripts/uptime.mjs` every 10 minutes. It checks:
+
+- `/v1/status` answers, the indexer is at most 1,800 blocks (about 30 minutes) behind, and payments are on;
+- a free report returns a verdict;
+- the paid check still answers 402 with payment options;
+- the home, economy and report pages render.
+
+A failure opens one issue labelled `uptime`; GitHub emails everyone watching the repo. Further failures comment on that issue, and the first green run closes it. Run the same check by hand with `node scripts/uptime.mjs`, or from the Actions tab with "Run workflow". To point it at another deployment, set the repository variables `ASSAY_API_URL` and `ASSAY_WEB_URL`; `MAX_LAG_BLOCKS` changes the lag limit when you run it by hand.
+
+## Publishing the packages
+
+`@assay/core`, `@assay/sdk` and `@assay/mcp` publish to npm from the monorepo. `pnpm publish` turns `workspace:*` into the real version, and `prepublishOnly` builds each package first:
+
+```sh
+npm login
+pnpm -r --filter "./packages/*" publish --access public
+```
+
+Bump the three versions together. Publish `core` first, since `sdk` and `mcp` depend on it; `pnpm -r` already publishes in dependency order.
+
 ## Onchain setup (once)
 
 All from the agent wallet, every transaction tagged and verified by the CLI:

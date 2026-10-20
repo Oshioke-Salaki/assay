@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "Check Celo x402 sellers with Assay before paying them. Includes a drop-in guard for any x402 fetch client.",
   "license": "MIT",
+  "author": "Oshioke Salaki",
+  "homepage": "https://assay-amber.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oshioke-Salaki/assay.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/Oshioke-Salaki/assay/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,7 +23,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [
@@ -27,9 +39,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@assay/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

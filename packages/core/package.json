@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "Assay scoring engine: organic x402 revenue, payment loops and ratings for Celo",
   "license": "MIT",
+  "author": "Oshioke Salaki",
+  "homepage": "https://assay-amber.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oshioke-Salaki/assay.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/Oshioke-Salaki/assay/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,12 +23,27 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "x402",
+    "celo",
+    "credit",
+    "scoring"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -63,15 +63,18 @@ export default function DocsPage() {
 curl ${api}/v1/address/0xSELLER
           `}</Code>
           <p>
-            Agents that check sellers before paying them use the paid check: $0.002 in USA₮, USDC or USDT over
-            x402, no rate limit, and a signed score in the answer.
+            Agents that check sellers before paying them use the paid check: $0.002 over x402 in USD₮ by
+            default, or USDC, USA₮, wARS, wBRL or wCOP. No rate limit, and a signed score in the answer.
           </p>
           <Code label="Paid check with an x402 client">{`
 import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
+import { preferAssets } from "@assay/sdk";
 
-const client = new x402Client().register("eip155:42220", new ExactEvmScheme(privateKeyToAccount(KEY)));
+// Pay in the token your wallet holds; x402 otherwise takes the server's first option (USD₮).
+const client = new x402Client(preferAssets("USDT", "USDC"))
+  .register("eip155:42220", new ExactEvmScheme(privateKeyToAccount(KEY)));
 const pay = wrapFetchWithPayment(fetch, client);
 const res = await pay("${api}/v1/check/0xSELLER");
 const { verdict, rating, reasons, attestation } = await res.json();
@@ -163,8 +166,8 @@ const { verdict, rating, reasons, attestation } = await res.json();
           <Code label="Guarding an x402 client">{`
 import { withAssayGuard, AssayBlockedError } from "@assay/sdk";
 
+// npm install @assay/sdk
 const guarded = withAssayGuard(fetch, pay, {
-  baseUrl: "${api}",
   minRating: "BB",        // optional: refuse anything rated below BB
   allowUnrated: true,     // new sellers have to start somewhere
   onAssayError: "allow",  // fail open if Assay is unreachable; "block" to fail closed
@@ -184,8 +187,10 @@ try {
             <code>assay_report</code>, <code>assay_find_agents</code> and <code>assay_economy</code>.
           </p>
           <Code label="Add the MCP server to Claude Code">{`
-git clone https://github.com/Oshioke-Salaki/assay && cd assay && pnpm install && pnpm -r --filter @assay/mcp... build
-claude mcp add assay --env ASSAY_URL=${api} -- node $(pwd)/packages/mcp/dist/index.js
+claude mcp add assay -- npx -y @assay/mcp
+
+# Claude Desktop, Cursor or any MCP client:
+# { "mcpServers": { "assay": { "command": "npx", "args": ["-y", "@assay/mcp"] } } }
           `}</Code>
         </Panel>
 
@@ -295,8 +300,9 @@ function payOut(address seller) external {
           <p>
             Reports in the browser and the free endpoints cost nothing, within 60 calls a minute. Paid
             endpoints are $0.002 per check and $0.01 per full report with attestation, paid over x402 through
-            Celo&rsquo;s facilitator in USA₮, USDC or USD₮. The seller pays the facilitator&rsquo;s fee;
-            buyers pay only the price.
+            Celo&rsquo;s facilitator in USD₮ by default, or USDC, USA₮, or Ripio&rsquo;s wARS, wBRL and wCOP
+            at the day&rsquo;s exchange rate. Nobody needs CELO for gas, wFIAT included. The seller pays the
+            facilitator&rsquo;s fee; buyers pay only the price.
           </p>
         </Panel>
 

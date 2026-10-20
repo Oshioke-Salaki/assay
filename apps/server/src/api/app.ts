@@ -85,7 +85,7 @@ export function createApp(deps: AppDeps): Hono {
   app.use("*", bodyLimit({ maxSize: 16 * 1024 }));
   app.use("/v1/check/*", validateAddressParam);
   app.use("/v1/attest/*", validateAddressParam);
-  app.use("*", paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true }));
+  app.use("*", paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true, fx: deps.fx }));
 
   const free = rateLimit(env.FREE_RATE_PER_MIN, env.INTERNAL_API_KEY);
   const cached = snapshotCache(() => analysis.current().builtAt, 4_000);

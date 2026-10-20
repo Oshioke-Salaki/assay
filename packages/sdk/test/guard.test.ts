@@ -3,7 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 
 type FetchInput = Parameters<typeof fetch>[0];
 
-import { AssayBlockedError, AssayError, createAssay, readPayTos, withAssayGuard } from "../src/index.js";
+import {
+  AssayBlockedError,
+  AssayError,
+  createAssay,
+  DEFAULT_BASE_URL,
+  preferAssets,
+  readPayTos,
+  withAssayGuard,
+} from "../src/index.js";
 
 const BASE = "https://assay.test";
 const SELLER = "0x5555555555555555555555555555555555555555";
@@ -150,8 +158,10 @@ describe("readPayTos", () => {
 });
 
 describe("createAssay", () => {
-  it("requires a base URL and validates addresses", () => {
-    expect(() => createAssay({ baseUrl: "" })).toThrow(/baseUrl/);
+  it("defaults to the public Assay API and validates addresses", async () => {
+    const f = vi.fn(async () => new Response("{}", { status: 200 }));
+    await createAssay({ fetch: f as unknown as typeof fetch }).economy();
+    expect(String((f.mock.calls[0] as unknown[])[0])).toBe(`${DEFAULT_BASE_URL}/v1/economy`);
     const a = createAssay({ baseUrl: BASE, fetch: vi.fn() });
     expect(() => a.address("0x12")).toThrow(/Not an address/);
     expect(() => a.check(SELLER)).toThrow(/payingFetch/);
@@ -170,5 +180,22 @@ describe("createAssay", () => {
     await expect(createAssay({ baseUrl: BASE, fetch: html }).economy()).rejects.toMatchObject({
       code: "bad_response",
     });
+  });
+});
+
+describe("preferAssets", () => {
+  const reqs = [
+    { asset: "0x48065fBBE25f71C9282ddf5e1cD6D6A887483D5e" }, // USDT
+    { asset: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C" }, // USDC
+    { asset: "0x0DC4F92879B7670e5f4e4e6e3c801D229129D90D" }, // wARS
+  ];
+  it("picks the first preferred token the server offers, by symbol or address", () => {
+    expect(preferAssets("USDC", "USDT")(2, reqs)).toBe(reqs[1]);
+    expect(preferAssets("wBRL", "wARS")(2, reqs)).toBe(reqs[2]);
+    expect(preferAssets("0x0dc4f92879b7670e5f4e4e6e3c801d229129d90d")(2, reqs)).toBe(reqs[2]);
+  });
+  it("falls back to the server's first option", () => {
+    expect(preferAssets("wCOP")(2, reqs)).toBe(reqs[0]);
+    expect(() => preferAssets("USDC")(2, [])).toThrow(/no way to pay/);
   });
 });

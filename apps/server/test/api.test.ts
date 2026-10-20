@@ -1,8 +1,9 @@
-import { dayOf } from "@assay/core";
+import { dayOf, tokenByAddress } from "@assay/core";
 import type { PublicClient } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Analysis } from "../src/analysis.js";
 import { createApp } from "../src/api/app.js";
+import { fiatUnits } from "../src/api/paid.js";
 import { Attester } from "../src/attest.js";
 import type { DB } from "../src/db.js";
 import { SettlementIndexer } from "../src/indexer/settlements.js";
@@ -303,6 +304,18 @@ describe("internal key", () => {
   });
 });
 
+describe("wFIAT prices", () => {
+  it("rounds up to two significant figures of the fiat, never below the dollar price", () => {
+    expect(fiatUnits(2_000n, 1523, 18)).toBe(3_100_000_000_000_000_000n); // 3.046 ARS -> 3.1
+    expect(fiatUnits(10_000n, 1523, 18)).toBe(16_000_000_000_000_000_000n); // 15.23 ARS -> 16
+    expect(fiatUnits(2_000n, 5.05, 18)).toBe(11_000_000_000_000_000n); // 0.0101 BRL -> 0.011
+    expect(fiatUnits(2_000n, 3174, 18)).toBe(6_400_000_000_000_000_000n); // 6.348 COP -> 6.4
+    expect(fiatUnits(2_000n, 1500, 18)).toBe(3_000_000_000_000_000_000n); // exact stays exact
+    expect(fiatUnits(2_000n, 1523.4, 18)).toBe(fiatUnits(2_000n, 1529, 18)); // small moves keep the price
+    expect(() => fiatUnits(2_000n, 0, 18)).toThrow();
+  });
+});
+
 describe("paid API", () => {
   it("answers 503 when selling is not configured, and 400 before that for bad addresses", async () => {
     const { app } = build();
@@ -311,7 +324,7 @@ describe("paid API", () => {
     expect((await get(app, "/v1/attest/0x00")).status).toBe(400);
   });
 
-  it("challenges unpaid requests with a 402 that prices USA₮ first", async () => {
+  it("challenges unpaid requests with a 402 that prices USD₮ first, then the other dollars and wFIAT", async () => {
     const supported = {
       kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:42220" }],
       extensions: [],
@@ -331,11 +344,30 @@ describe("paid API", () => {
     const header = res.headers.get("payment-required");
     expect(header).toBeTruthy();
     const required = JSON.parse(Buffer.from(header!, "base64").toString("utf8")) as {
-      accepts: { asset: string; amount: string; payTo: string; network: string }[];
+      accepts: {
+        asset: string;
+        amount: string;
+        payTo: string;
+        network: string;
+        extra: { name: string; assetTransferMethod?: string };
+      }[];
+      extensions?: Record<string, unknown>;
     };
-    expect(required.accepts[0]?.asset.toLowerCase()).toBe("0xd2ab3c9a02dbbab236bfec45d1d755df4267f771");
-    expect(required.accepts[0]?.amount).toBe("2000");
-    expect(required.accepts).toHaveLength(3);
+    const symbols = required.accepts.map((a) => tokenByAddress(a.asset)?.symbol);
+    expect(symbols).toEqual(["USDT", "USDC", "USAT", "wARS", "wBRL", "wCOP"]);
+    // $0.002: 2000 micro-units of each dollar; wFIAT at the fixed test rates (ARS 1500, BRL 5, COP 4000).
+    expect(required.accepts.map((a) => a.amount)).toEqual([
+      "2000",
+      "2000",
+      "2000",
+      "3000000000000000000",
+      "10000000000000000",
+      "8000000000000000000",
+    ]);
+    expect(required.accepts.slice(3).every((a) => a.extra.assetTransferMethod === "permit2")).toBe(true);
+    expect(required.accepts[3]?.extra.name).toBe("Peso Argentino");
+    expect(required.accepts.slice(0, 3).every((a) => a.extra.assetTransferMethod === undefined)).toBe(true);
+    expect(required.extensions?.eip2612GasSponsoring).toBeTruthy();
     expect(required.accepts.every((a) => a.network === "eip155:42220")).toBe(true);
     // The 402 carries CORS so a browser can read it.
     const cross = await get(app, `/v1/check/${SHOP}`, { origin: "https://assay.example" });

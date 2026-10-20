@@ -1,0 +1,66 @@
+name: Uptime
+
+# Every 10 minutes: API status and indexer lag, a free report, the paid route's 402, and the site.
+# A failure opens one "Assay is down" issue (GitHub emails the repo's watchers), later failures
+# comment on it, and the first green run closes it.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Assay
+        id: check
+        continue-on-error: true
+        env:
+          API_URL: ${{ vars.ASSAY_API_URL || 'https://api-production-63cc.up.railway.app' }}
+          WEB_URL: ${{ vars.ASSAY_WEB_URL || 'https://assay-amber.vercel.app' }}
+        run: |
+          set -o pipefail
+          node scripts/uptime.mjs | tee report.md
+      - name: Open or update the outage issue
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create uptime --color B60205 --description "Automated uptime alerts" 2>/dev/null || true
+          open=$(gh issue list --label uptime --state open --json number --jq '.[0].number')
+          body="$(cat report.md)
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Still failing at $(date -u +'%H:%M UTC'):
+
+          $body"
+          else
+            gh issue create --label uptime --title "Assay is down: $(date -u +'%Y-%m-%d %H:%M UTC')" --body "$body"
+          fi
+          exit 1
+      - name: Close the outage issue on recovery
+        if: steps.check.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --label uptime --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Recovered at $(date -u +'%H:%M UTC'):
+
+          $(cat report.md)"
+          done

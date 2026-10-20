@@ -1,10 +1,11 @@
 "use client";
 
 import type { Rating } from "@assay/core";
-import { TOKENS } from "@assay/core";
+import { type TokenInfo, tokenByAddress } from "@assay/core";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { useState } from "react";
+import { formatUnits } from "viem";
 import styles from "@/components/app.module.css";
 import { useToast } from "@/components/Toaster";
 import { API_PUBLIC } from "@/lib/api";
@@ -14,8 +15,28 @@ import { WalletProviders } from "./Providers";
 import { useWallet, walletErrorMessage } from "./useWallet";
 import { WalletPicker } from "./WalletPicker";
 
-const PRICE_UNITS = 10_000n; // $0.01 in 6-decimal dollar tokens
-const DOLLARS = TOKENS.filter((t) => t.transfer === "eip3009");
+interface Offer {
+  token: TokenInfo;
+  amount: bigint;
+}
+
+/** The tokens and amounts the server's 402 asks for, in the server's order (USD₮ first). */
+async function priceList(url: string): Promise<Offer[]> {
+  const res = await corsSafeFetch(url);
+  if (res.status === 503) throw new Error("Paid reports are not switched on for this Assay server yet.");
+  const header = res.headers.get("payment-required");
+  if (res.status !== 402 || !header) throw new Error(`Assay answered ${res.status} instead of a price.`);
+  const required = JSON.parse(atob(header)) as { accepts?: { asset: string; amount: string }[] };
+  return (required.accepts ?? []).flatMap((a) => {
+    const token = tokenByAddress(a.asset);
+    return token ? [{ token, amount: BigInt(a.amount) }] : [];
+  });
+}
+
+function shown(o: Offer): string {
+  const n = formatUnits(o.amount, o.token.decimals);
+  return o.token.fiat === "USD" ? `$${n} in ${o.token.symbol}` : `${n} ${o.token.symbol}`;
+}
 
 type Step =
   | { kind: "idle" }
@@ -50,8 +71,8 @@ export function PublishHallmark(props: { subject: `0x${string}`; rating: Rating 
 }
 
 /**
- * Buy a signed score for $0.01 over x402 (paid from the visitor's own wallet, in whichever
- * of USA₮, USDC or USDT it holds) and publish it to AssayRegistry so contracts can read it.
+ * Buy a signed score for $0.01 over x402 (paid from the visitor's own wallet, in the first of
+ * USD₮, USDC, USA₮, wARS, wBRL or wCOP it holds enough of) and publish it to AssayRegistry so contracts can read it.
  */
 function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) {
   const w = useWallet();
@@ -69,11 +90,13 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       const account = w.address;
 
       setStep({ kind: "working", text: "Checking your stablecoin balances…" });
+      const url = `${API_PUBLIC}/v1/attest/${subject}`;
+      const offers = await priceList(url);
       const balances = await Promise.all(
-        DOLLARS.map((t) =>
+        offers.map((o) =>
           pub
             .readContract({
-              address: t.address,
+              address: o.token.address,
               abi: erc20BalanceAbi,
               functionName: "balanceOf",
               args: [account],
@@ -81,18 +104,19 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
             .catch(() => 0n),
         ),
       );
-      const token = DOLLARS.find((_, i) => (balances[i] ?? 0n) >= PRICE_UNITS);
-      if (!token)
+      // The first token in the server's order that this wallet can cover.
+      const offer = offers.find((o, i) => (balances[i] ?? 0n) >= o.amount);
+      if (!offer)
         throw new Error(
-          "This wallet holds less than $0.01 in USA₮, USDC or USDT on Celo. Top up a cent and try again.",
+          `This wallet cannot cover $0.01 in ${offers.map((o) => o.token.symbol).join(", ")} on Celo. Top up a little and try again.`,
         );
 
       setStep({
         kind: "working",
-        text: `Paying $0.01 in ${token.symbol}. Sign the authorization in your wallet…`,
+        text: `Paying ${shown(offer)}. Sign the authorization in your wallet…`,
       });
       const payer = new x402Client(
-        (_v, reqs) => reqs.find((r) => r.asset.toLowerCase() === token.address) ?? reqs[0]!,
+        (_v, reqs) => reqs.find((r) => r.asset.toLowerCase() === offer.token.address) ?? reqs[0]!,
       );
       payer.register(
         "eip155:42220",
@@ -100,11 +124,25 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
           address: account,
           signTypedData: (m) =>
             client.signTypedData({ account, ...(m as Parameters<typeof client.signTypedData>[0]) }),
+          // wFIAT pays through Permit2: the scheme reads the allowance and, if it is missing, signs an
+          // EIP-2612 permit that the facilitator submits, so the payer still needs no gas.
+          readContract: (args) => pub.readContract(args as Parameters<typeof pub.readContract>[0]),
         }),
       );
+      // x402 pays only its default assets (the dollars) unless told otherwise: allow this one token,
+      // capped at the amount just quoted.
+      if (offer.token.fiat !== "USD")
+        payer.setSpendControls({
+          allowedAssets: [
+            {
+              network: "eip155:42220",
+              asset: offer.token.address,
+              maxAmountPerPayment: offer.amount.toString(),
+            },
+          ],
+        });
       const pay = wrapFetchWithPayment(corsSafeFetch, payer);
-      const res = await pay(`${API_PUBLIC}/v1/attest/${subject}`);
-      if (res.status === 503) throw new Error("Paid reports are not switched on for this Assay server yet.");
+      const res = await pay(url);
       if (!res.ok) throw new Error(`Assay answered ${res.status}. Nothing was published.`);
       const body = (await res.json()) as Attested;
       if (!body.attestation)

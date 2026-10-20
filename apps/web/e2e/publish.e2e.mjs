@@ -99,7 +99,13 @@ function injected() {
   window.ethereum = provider;
 }
 
-const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+// A local build talks to the production API, whose CORS list does not include localhost. LOCAL=1
+// turns off the browser's same-origin checks for that run only; against the live site leave it unset.
+const browser = await chromium.launch({
+  executablePath: CHROME,
+  headless: true,
+  args: process.env.LOCAL === "1" ? ["--disable-web-security"] : [],
+});
 const page = await browser.newPage();
 const problems = [];
 page.on("requestfailed", (r) =>

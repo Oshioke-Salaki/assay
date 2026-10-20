@@ -319,7 +319,7 @@ export default async function Home() {
             <span className={styles.bigNum}>$0.002</span>
           </div>
           <p className={styles.tileName}>Priced per call</p>
-          <p className={styles.tileLine}>Agents pay in USA₮ over x402.</p>
+          <p className={styles.tileLine}>Agents pay in USD₮ over x402.</p>
         </div>
         <div
           className={`${styles.tile} ${styles.t3x2}`}
@@ -348,8 +348,8 @@ export default async function Home() {
           ["ERC-8004", "Agent identities and every review in the Reputation Registry."],
           ["Self Agent ID", "Passport-backed proof that a key belongs to one human."],
           ["ERC-8021", "Attribution tags on every transaction Assay sends."],
-          ["USA₮", "The token agents pay Assay in, alongside USDC and USDT."],
-          ["Ripio wFIAT", "wARS, wBRL and wCOP settlements, priced at the day's rate."],
+          ["USD₮", "The default token agents pay Assay in, alongside USDC and USA₮."],
+          ["Ripio wFIAT", "wARS, wBRL and wCOP: indexed, and accepted for checks at the day's rate."],
         ].map(([name, line]) => (
           <div key={name} className={styles.railTile} data-reveal="1">
             <p className={styles.railName}>{name}</p>
@@ -387,8 +387,8 @@ export default async function Home() {
             For agents that check a seller before paying it.
           </p>
           <p className={styles.planIncludes} data-reveal="2">
-            Paid over x402 in USA₮, USDC or USDT on Celo. A check returns pass, caution or block with a signed
-            score. The full report with evidence and an attestation is $0.01.
+            Paid over x402 in USD₮, USDC, USA₮, wARS, wBRL or wCOP on Celo. A check returns pass, caution or
+            block with a signed score. The full report with evidence and an attestation is $0.01.
           </p>
           <div className={styles.planFoot} data-reveal="3">
             <p className={styles.price}>

@@ -5,9 +5,12 @@ export type { Address, CheckResult, Rating } from "@assay/core";
 type Fetch = typeof fetch;
 type FetchInput = Parameters<typeof fetch>[0];
 
+/** The public Assay API on Celo mainnet. Pass `baseUrl` to use your own deployment instead. */
+export const DEFAULT_BASE_URL = "https://api-production-63cc.up.railway.app";
+
 export interface AssayOptions {
-  /** Assay API origin, e.g. the URL your Assay server is deployed at. */
-  baseUrl: string;
+  /** Assay API origin. Default: the public Assay API, {@link DEFAULT_BASE_URL}. */
+  baseUrl?: string;
   /** Plain fetch used for free endpoints. */
   fetch?: Fetch;
   /**
@@ -49,9 +52,8 @@ export interface Attestation {
   signer: Address;
 }
 
-export function createAssay(opts: AssayOptions) {
-  if (!opts?.baseUrl) throw new AssayError(0, "no_base_url", "createAssay needs a baseUrl");
-  const base = opts.baseUrl.replace(/\/+$/, "");
+export function createAssay(opts: AssayOptions = {}) {
+  const base = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const plain = opts.fetch ?? globalThis.fetch.bind(globalThis);
 
   async function call<T>(f: Fetch, path: string): Promise<T> {
@@ -118,8 +120,9 @@ export class AssayBlockedError extends Error {
 }
 
 export interface GuardOptions {
-  /** Assay client used for checks (its free address endpoint). Give this or `baseUrl`. */
+  /** Assay client used for checks (its free address endpoint). Default: one for `baseUrl`. */
   assay?: AssayClient;
+  /** Default: the public Assay API. */
   baseUrl?: string;
   /** Lowest acceptable rating. Default: none, only "block" verdicts stop a payment. */
   minRating?: Exclude<Rating, "NR">;
@@ -136,10 +139,7 @@ export interface GuardOptions {
 /**
  * Wrap an x402-paying fetch so it checks the seller with Assay before any money moves.
  *
- *   const guarded = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), {
- *     baseUrl: "https://your-assay-server",
- *     minRating: "BB",
- *   });
+ *   const guarded = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), { minRating: "BB" });
  *   await guarded("https://seller.example/api");   // throws AssayBlockedError for wash sellers
  *
  * The first request goes out unpaid. If the seller answers 402, every `payTo` it
@@ -148,8 +148,8 @@ export interface GuardOptions {
  * no payTo cannot be checked and is passed to the paying fetch. Request bodies must
  * be replayable (strings, Blobs, FormData or a Request object), since the request is sent twice.
  */
-export function withAssayGuard(plainFetch: Fetch, payingFetch: Fetch, opts: GuardOptions): Fetch {
-  const assay = opts.assay ?? createAssay({ baseUrl: opts.baseUrl ?? "", fetch: plainFetch });
+export function withAssayGuard(plainFetch: Fetch, payingFetch: Fetch, opts: GuardOptions = {}): Fetch {
+  const assay = opts.assay ?? createAssay({ baseUrl: opts.baseUrl, fetch: plainFetch });
   const cacheMs = opts.cacheMs ?? 10 * 60_000;
   const cache = new Map<Address, { at: number; result: CheckResult }>();
 
@@ -190,6 +190,39 @@ export function withAssayGuard(plainFetch: Fetch, payingFetch: Fetch, opts: Guar
     return payingFetch(replayable, init);
   };
   return guarded as Fetch;
+}
+
+/** Token symbols Assay accepts, mapped to their Celo addresses. */
+export const CELO_PAY_TOKENS = {
+  USDT: "0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e",
+  USDC: "0xceba9300f2b948710d2653dd7b07f33a8b32118c",
+  USAT: "0xd2ab3c9a02dbbab236bfec45d1d755df4267f771",
+  wARS: "0x0dc4f92879b7670e5f4e4e6e3c801d229129d90d",
+  wBRL: "0xd76f5faf6888e24d9f04bf92a0c8b921fe4390e0",
+  wCOP: "0x8a1d45e102e886510e891d2ec656a708991e2d76",
+} as const satisfies Record<string, Address>;
+
+export type CeloPayToken = keyof typeof CELO_PAY_TOKENS;
+
+/**
+ * A payment-requirements selector for `new x402Client(selector)`: pay in the first of `tokens`
+ * the server accepts. x402's default takes the server's first option whatever the wallet holds,
+ * so an agent that only holds USDC should say so:
+ *
+ *   const client = new x402Client(preferAssets("USDC", "USDT"));
+ */
+export function preferAssets(...tokens: (CeloPayToken | Address)[]) {
+  const wanted = tokens.map((t) =>
+    t in CELO_PAY_TOKENS ? CELO_PAY_TOKENS[t as CeloPayToken] : t.toLowerCase(),
+  );
+  return <R extends { asset: string }>(_version: number, reqs: R[]): R => {
+    for (const w of wanted) {
+      const hit = reqs.find((r) => r.asset.toLowerCase() === w);
+      if (hit) return hit;
+    }
+    if (!reqs[0]) throw new AssayError(0, "no_requirements", "The server offered no way to pay");
+    return reqs[0];
+  };
 }
 
 /** Pull payTo addresses out of an x402 v2 PAYMENT-REQUIRED header, or a v1 JSON body. */

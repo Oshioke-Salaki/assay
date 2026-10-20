@@ -43,7 +43,7 @@ try {
       { timeout: 10_000 },
     );
     check(true, `${width}px: search narrows to the one matching payer`);
-    check(await panel.getByText(/Page 1 of/).count() === 0, `${width}px: pager hides for one page`);
+    check((await panel.getByText(/Page 1 of/).count()) === 0, `${width}px: pager hides for one page`);
     await panel.getByRole("textbox").fill("0xdeadbeefdeadbeef");
     await panel.getByText(/No payer matches/).waitFor({ timeout: 10_000 });
     check(true, `${width}px: no-match search shows an empty state`);
@@ -54,7 +54,10 @@ try {
       await organic.click();
       await page.waitForTimeout(1200);
       const classes = await panel.locator("tbody tr td:nth-child(2)").allTextContents();
-      check(classes.length > 0 && classes.every((c) => c.startsWith("Organic")), `${width}px: Organic filter shows only organic payers`);
+      check(
+        classes.length > 0 && classes.every((c) => c.startsWith("Organic")),
+        `${width}px: Organic filter shows only organic payers`,
+      );
     }
     if (OUT && width === 390) await page.screenshot({ path: `${OUT}/paged-390-filter.png` });
     check(errors.length === 0, `${width}px: no page errors ${errors.join(" | ")}`);

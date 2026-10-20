@@ -7,7 +7,7 @@ Assay reads every x402 settlement on Celo mainnet and tests each seller's revenu
 On the first full pass of Celo mainnet history, Assay found 6 payment loops (the largest 378 wallets paying each other about $10 back and forth across 159,190 settlements) and netted out over $14,000 of circular volume.
 
 - **People** read reports in the browser for free.
-- **Agents** pay $0.002 per check over x402 in USA₮, USDC or USD₮, or put `withAssayGuard` in front of their own x402 client so a blocked seller is never paid.
+- **Agents** pay $0.002 per check over x402 in USD₮ (or USDC, USA₮, wARS, wBRL, wCOP), or put `withAssayGuard` (`npm install @assay/sdk`) in front of their own x402 client so a blocked seller is never paid.
 - **Contracts** gate on `AssayRegistry.isInvestmentGrade(seller)`.
 
 ## What is in this repo
