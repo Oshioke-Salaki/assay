@@ -26,3 +26,5 @@ apps/web/.taste-skill/app-*/
 .agents/
 .claude/
 skills-lock.json
+.vercel
+.env*
