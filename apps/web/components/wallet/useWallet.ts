@@ -42,6 +42,8 @@ export function walletErrorMessage(err: unknown): string {
     return "Your wallet does not know Celo yet. Approve adding Celo mainnet when it asks, then try again.";
   if (/ProviderNotFound|no provider|not installed/i.test(text))
     return "No wallet found in this browser. Install MetaMask or Rabby, or open the page in MiniPay.";
+  if (/failed to fetch|networkerror|load failed/i.test(text))
+    return "Could not reach the Assay server. Check your connection and try again; nothing was charged.";
   const own = e?.shortMessage ?? e?.message?.split("\n")[0];
   return own ? `Your wallet said: ${own}` : "Something went wrong in the wallet.";
 }

@@ -28,6 +28,7 @@ import {
   type Hex,
   http,
   parseAbi,
+  parseUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
@@ -186,6 +187,32 @@ async function publish(subjectArg: string | undefined) {
   console.log(`Published: score ${stored.score}, rating code ${stored.rating}, fresh ${fresh}`);
 }
 
+const ERC20_TRANSFER = parseAbi(["function transfer(address to, uint256 amount) returns (bool)"]);
+const SENDABLE: Record<string, { address: `0x${string}`; decimals: number } | null> = {
+  celo: null,
+  usdc: { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", decimals: 6 },
+  usdt: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 },
+};
+
+/** Tagged transfer from the agent wallet: ops send <to> <celo|usdc|usdt> <amount> */
+async function send(to: string | undefined, asset: string | undefined, amount: string | undefined) {
+  if (!to || !isAddress(to) || !asset || !(asset in SENDABLE) || !amount || !/^\d+(\.\d+)?$/.test(amount)) {
+    throw new Error("Usage: ops send 0xTo celo|usdc|usdt 0.05");
+  }
+  const w = wallet();
+  const token = SENDABLE[asset];
+  const hash = token
+    ? await w.writeContract({
+        address: token.address,
+        abi: ERC20_TRANSFER,
+        functionName: "transfer",
+        args: [to as `0x${string}`, parseUnits(amount, token.decimals)],
+      })
+    : await w.sendTransaction({ to: to as `0x${string}`, value: parseUnits(amount, 18) });
+  await confirm(hash);
+  console.log(`sent ${amount} ${asset.toUpperCase()} to ${to}`);
+}
+
 async function verifyTag(hash: string | undefined) {
   if (!isTxHash(hash)) throw new Error("Usage: ops verify-tag 0xTxHash");
   const tag = await verifyTx({ client: publicClient, hash });
@@ -198,6 +225,7 @@ const commands: Record<string, () => Promise<void>> = {
   "register-agent": registerAgent,
   publish: () => publish(arg),
   "verify-tag": () => verifyTag(arg),
+  send: () => send(arg, process.argv[4], process.argv[5]),
 };
 const run = cmd ? commands[cmd] : undefined;
 if (!run) {

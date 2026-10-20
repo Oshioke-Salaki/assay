@@ -185,6 +185,36 @@ describe("free API", () => {
     expect((await get(app, `/v1/agents/777/payments/${SHOP}`)).status).toBe(404);
   });
 
+  it("pages, searches and filters who paid an address", async () => {
+    type Page = { total: number; counts: Record<string, number>; rows: { payer: string; class: string }[] };
+    const p1 = (await (await get(app, `/v1/address/${SHOP}/payers?limit=3`)).json()) as Page;
+    expect(p1.total).toBe(8);
+    expect(p1.rows).toHaveLength(3);
+    expect(p1.counts.all).toBe(8);
+    const p3 = (await (await get(app, `/v1/address/${SHOP}/payers?limit=3&offset=6`)).json()) as Page;
+    expect(p3.rows).toHaveLength(2);
+    const seen = new Set([...p1.rows, ...p3.rows].map((r) => r.payer));
+    expect(seen.size).toBe(5);
+    const one = (await (
+      await get(app, `/v1/address/${SHOP}/payers?q=${CUSTOMERS[0]!.slice(30)}`)
+    ).json()) as Page;
+    expect(one.rows.map((r) => r.payer)).toEqual([CUSTOMERS[0]]);
+    const loops = (await (await get(app, `/v1/address/${RING[0]}/payers?class=loop`)).json()) as Page;
+    expect(loops.rows.every((r) => r.class === "loop")).toBe(true);
+    expect((await get(app, "/v1/address/0x12/payers")).status).toBe(400);
+    const none = (await (await get(app, `/v1/address/${SHOP}/payers?q=zzzz`)).json()) as Page;
+    expect(none.total).toBe(0);
+  });
+
+  it("pages who an address paid", async () => {
+    const r = (await (await get(app, `/v1/address/${RING[0]}/counterparties?limit=1`)).json()) as {
+      total: number;
+      rows: unknown[];
+    };
+    expect(r.total).toBe(1);
+    expect(r.rows).toHaveLength(1);
+  });
+
   it("publishes an ERC-8004 registration file", async () => {
     const reg = (await (await get(app, "/.well-known/agent-registration.json")).json()) as Record<
       string,
@@ -192,6 +222,20 @@ describe("free API", () => {
     >;
     expect(reg.type).toBe("https://eips.ethereum.org/EIPS/eip-8004#registration-v1");
     expect(reg.x402Support).toBe(true);
+  });
+
+  it("lets an x402 browser client's paid retry through the CORS preflight", async () => {
+    const res = await app.request(`/v1/attest/${SHOP}`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://assay.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "payment-signature,access-control-expose-headers",
+      },
+    });
+    const allowed = (res.headers.get("access-control-allow-headers") ?? "").toLowerCase();
+    expect(allowed).toContain("payment-signature");
+    expect(allowed).toContain("access-control-expose-headers");
   });
 
   it("only allows configured CORS origins", async () => {
@@ -293,6 +337,9 @@ describe("paid API", () => {
     expect(required.accepts[0]?.amount).toBe("2000");
     expect(required.accepts).toHaveLength(3);
     expect(required.accepts.every((a) => a.network === "eip155:42220")).toBe(true);
+    // The 402 carries CORS so a browser can read it.
+    const cross = await get(app, `/v1/check/${SHOP}`, { origin: "https://assay.example" });
+    expect(cross.headers.get("access-control-allow-origin")).toBe("https://assay.example");
     // Free routes stay free when payments are on.
     expect((await get(app, "/v1/economy")).status).toBe(200);
   });

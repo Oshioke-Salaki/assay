@@ -55,13 +55,29 @@ export function createApp(deps: AppDeps): Hono {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  // Outermost: the x402 middleware builds a fresh Response when settlement fails, which drops the
+  // CORS headers. Re-apply them so a browser shows the real reason instead of "Failed to fetch".
+  app.use("*", async (c, next) => {
+    await next();
+    const origin = c.req.header("origin");
+    if (!origin || c.res.headers.get("access-control-allow-origin")) return;
+    if (!(origins.includes("*") || origins.includes(origin))) return;
+    c.res.headers.set("access-control-allow-origin", origin);
+    c.res.headers.set(
+      "access-control-expose-headers",
+      "payment-required,payment-response,x-payment-response",
+    );
+    c.res.headers.append("vary", "Origin");
+  });
   app.use("*", secureHeaders({ crossOriginResourcePolicy: "cross-origin" }));
   app.use(
     "*",
     cors({
       origin: (origin) => (origins.includes("*") || origins.includes(origin) ? origin : null),
       allowMethods: ["GET", "OPTIONS"],
-      allowHeaders: ["content-type", "payment-signature", "x-payment"],
+      // x402 browser clients send access-control-expose-headers on their paid retry; refusing it
+      // fails the preflight and the payment looks like a network error.
+      allowHeaders: ["content-type", "payment-signature", "x-payment", "access-control-expose-headers"],
       exposeHeaders: ["payment-required", "payment-response", "x-payment-response"],
       maxAge: 600,
     }),
@@ -188,6 +204,47 @@ export function createApp(deps: AppDeps): Hono {
     });
   });
 
+  /** One page of who paid an address, searchable by address and filterable by class. */
+  app.get("/v1/address/:address/payers", free, cached, (c) => {
+    const raw = c.req.param("address");
+    if (!isAddress(raw)) return badAddress(c);
+    const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 20);
+    const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
+    const q = (c.req.query("q") ?? "").trim().toLowerCase().slice(0, 42);
+    const cls = c.req.query("class");
+    const all = analysis.assess(normalizeAddress(raw)).seller.payerLines;
+    const rows = all.filter(
+      (l) =>
+        (!q || l.payer.includes(q) || (l.funder ?? "").includes(q)) &&
+        (!cls || cls === "all" || l.class === cls),
+    );
+    const counts = { all: all.length, organic: 0, loop: 0, "seller-funded": 0, "shared-funder": 0 } as Record<
+      string,
+      number
+    >;
+    for (const l of all) counts[l.class] = (counts[l.class] ?? 0) + 1;
+    return c.json({ total: rows.length, counts, offset, limit, rows: rows.slice(offset, offset + limit) });
+  });
+
+  /** One page of who an address paid, searchable by address. */
+  app.get("/v1/address/:address/counterparties", free, cached, (c) => {
+    const raw = c.req.param("address");
+    if (!isAddress(raw)) return badAddress(c);
+    const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 20);
+    const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
+    const q = (c.req.query("q") ?? "").trim().toLowerCase().slice(0, 42);
+    const loop = c.req.query("loop");
+    const all = analysis.assess(normalizeAddress(raw)).buyer.counterparties;
+    const rows = all.filter((x) => (!q || x.payee.includes(q)) && (loop !== "1" || x.inLoop));
+    return c.json({
+      total: rows.length,
+      all: all.length,
+      offset,
+      limit,
+      rows: rows.slice(offset, offset + limit),
+    });
+  });
+
   app.get("/v1/agents", free, cached, (c) => {
     const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 30);
     const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
@@ -288,7 +345,7 @@ export function createApp(deps: AppDeps): Hono {
       name: "Assay",
       description:
         "Credit bureau for the agent economy on Celo. Scores every x402 seller by organic revenue, detects payment loops and self-funded payers, and signs EIP-712 scores that contracts can verify.",
-      image: `${env.WEB_URL}/icon.png`,
+      image: `${env.WEB_URL}/apple-icon`,
       services: [
         { name: "web", endpoint: env.WEB_URL },
         { name: "x402-check", endpoint: `${env.PUBLIC_URL}/v1/check/{address}`, version: "1" },
