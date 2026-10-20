@@ -59,10 +59,11 @@ export function createRuntime(env: Env): Runtime {
   const enrichRpc = env.BUY_PAYER_KEY
     ? (createPublicClient({
         chain: celo,
+        // The gateway caps request bodies at 128 KiB. No JSON-RPC batching, and multicall chunks of
+        // 16 KB of calldata (about 32 KB as hex), so every paid request stays far below the cap.
         transport: http(env.BUY_CHAINSTACK_URL, {
-          timeout: 30_000,
+          timeout: 45_000,
           retryCount: 0,
-          batch: { batchSize: 2000, wait: 50 },
           fetchFn: createPayingFetch({
             db,
             privateKey: env.BUY_PAYER_KEY,
@@ -71,7 +72,7 @@ export function createRuntime(env: Env): Runtime {
             dailyCapUsd: env.BUY_DAILY_CAP_USD,
           }),
         }),
-        batch: { multicall: { batchSize: 1024 * 64 } },
+        batch: { multicall: { batchSize: 16 * 1024 } },
       }) as PublicClient)
     : rpc;
   const enricher = new Enricher(
@@ -90,14 +91,22 @@ export function createRuntime(env: Env): Runtime {
   }
 
   let head: number | null = null;
+  // Called on every paid request, so it must be cheap: the newest settlement comes from the block
+  // index (not a scan of every row), and the whole status is cached for two seconds.
+  const lastTsStmt = db.prepare("SELECT ts FROM settlements ORDER BY block DESC LIMIT 1");
+  let cachedStatus: { at: number; value: IndexStatus } | null = null;
   const status = (): IndexStatus => {
-    const last = db.prepare("SELECT MAX(ts) AS ts FROM settlements").get() as { ts: number | null };
-    return {
+    const now = Date.now();
+    if (cachedStatus && now - cachedStatus.at < 2_000) return { ...cachedStatus.value, finalizedHead: head };
+    const last = lastTsStmt.get() as { ts: number } | undefined;
+    const value: IndexStatus = {
       settlementsBlock: getCursor(db, SETTLEMENT_CURSOR) ?? 0,
       registryBlock: getCursor(db, REGISTRY_CURSOR) ?? 0,
       finalizedHead: head,
-      lastSettlementTs: last.ts,
+      lastSettlementTs: last?.ts ?? null,
     };
+    cachedStatus = { at: now, value };
+    return value;
   };
 
   const syncOnce = async (signal?: AbortSignal) => {

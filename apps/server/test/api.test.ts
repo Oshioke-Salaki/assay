@@ -215,6 +215,50 @@ describe("rate limiting", () => {
   });
 });
 
+describe("response cache", () => {
+  it("serves repeats from memory and drops everything when the snapshot changes", async () => {
+    const { app, db, analysis } = build();
+    const first = await get(app, `/v1/address/${SHOP}`);
+    expect(first.headers.get("x-cache")).toBeNull();
+    const second = await get(app, `/v1/address/${SHOP}`);
+    expect(second.headers.get("x-cache")).toBe("hit");
+    expect(await second.json()).toEqual(await first.json());
+    // New data lands: the next answer is computed fresh and reflects it.
+    db.prepare(
+      "INSERT INTO pair_days (payer, payee, day, count, usd, first_ts, last_ts, last_tx) VALUES (?, ?, 1, 1, 1000, 1, 1, '0x1')",
+    ).run(`0x${"e".repeat(40)}`, SHOP);
+    analysis.invalidate();
+    const third = await get(app, `/v1/address/${SHOP}`);
+    expect(third.headers.get("x-cache")).toBeNull();
+    const t = (await third.json()) as { assessment: { seller: { grossUsd: number } } };
+    expect(t.assessment.seller.grossUsd).toBeGreaterThan(1000);
+  });
+
+  it("never caches errors", async () => {
+    const { app } = build();
+    expect((await get(app, "/v1/agents/999999")).status).toBe(404);
+    const again = await get(app, "/v1/agents/999999");
+    expect(again.status).toBe(404);
+    expect(again.headers.get("x-cache")).toBeNull();
+  });
+});
+
+describe("internal key", () => {
+  it("lets the web app's servers past the per-IP limit, and nobody else", async () => {
+    const key = "k".repeat(32);
+    const { app } = build({ FREE_RATE_PER_MIN: "1", INTERNAL_API_KEY: key });
+    const ip = { "x-forwarded-for": "198.51.100.7" };
+    for (let i = 0; i < 5; i++)
+      expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": key })).status).toBe(200);
+    expect((await get(app, "/v1/economy", ip)).status).toBe(200);
+    expect((await get(app, "/v1/economy", ip)).status).toBe(429);
+    expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": `${key}x` })).status).toBe(429);
+    expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": "k".repeat(31) + "j" })).status).toBe(
+      429,
+    );
+  });
+});
+
 describe("paid API", () => {
   it("answers 503 when selling is not configured, and 400 before that for bad addresses", async () => {
     const { app } = build();

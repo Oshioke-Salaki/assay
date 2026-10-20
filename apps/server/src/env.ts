@@ -58,6 +58,11 @@ const schema = z.object({
   /** Assay's own ERC-8004 agent id, once registered. */
   AGENT_ID: optional(z.string().regex(/^\d+$/)),
   FREE_RATE_PER_MIN: z.coerce.number().int().positive().default(60),
+  /**
+   * Shared secret the web app sends from its servers. All of its traffic leaves from a few
+   * Vercel IPs, so without this the per-IP limit would throttle every visitor at once.
+   */
+  INTERNAL_API_KEY: optional(z.string().min(24)),
 });
 
 export type Env = z.infer<typeof schema>;

@@ -107,6 +107,13 @@ export interface Status {
   payments: boolean;
 }
 
+/** Server-only: lets this app's servers past the API's per-IP limit. Never sent from a browser. */
+function internalHeader(): Record<string, string> {
+  if (typeof window !== "undefined") return {};
+  const key = process.env.ASSAY_INTERNAL_KEY;
+  return key ? { "x-assay-internal": key } : {};
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -121,8 +128,10 @@ export async function api<T>(path: string, revalidate = 30): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_INTERNAL}${path}`, {
+      // Cached and shared across visitors for `revalidate` seconds, so a crowd on one report costs one call.
       next: { revalidate },
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", ...internalHeader() },
+      signal: AbortSignal.timeout(15_000),
     });
   } catch {
     throw new ApiError(0, "The Assay API is not reachable right now.");

@@ -71,7 +71,8 @@ export function createApp(deps: AppDeps): Hono {
   app.use("/v1/attest/*", validateAddressParam);
   app.use("*", paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true }));
 
-  const free = rateLimit(env.FREE_RATE_PER_MIN);
+  const free = rateLimit(env.FREE_RATE_PER_MIN, env.INTERNAL_API_KEY);
+  const cached = snapshotCache(() => analysis.current().builtAt, 4_000);
 
   app.get("/", (c) =>
     c.json({
@@ -156,14 +157,14 @@ export function createApp(deps: AppDeps): Hono {
     });
   });
 
-  app.get("/v1/economy/daily", free, (c) => {
+  app.get("/v1/economy/daily", free, cached, (c) => {
     const days = clampInt(c.req.query("days"), 1, 3650, 120);
     const daily = analysis.current().daily;
     c.header("cache-control", "public, max-age=60");
     return c.json({ points: daily.slice(-days) });
   });
 
-  app.get("/v1/sellers", free, (c) => {
+  app.get("/v1/sellers", free, cached, (c) => {
     const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 50);
     const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
     const rating = c.req.query("rating");
@@ -174,7 +175,7 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ total: rows.length, rows: rows.slice(offset, offset + limit) });
   });
 
-  app.get("/v1/address/:address", free, (c) => {
+  app.get("/v1/address/:address", free, cached, (c) => {
     const raw = c.req.param("address");
     if (!isAddress(raw)) return badAddress(c);
     const address = normalizeAddress(raw);
@@ -187,14 +188,14 @@ export function createApp(deps: AppDeps): Hono {
     });
   });
 
-  app.get("/v1/agents", free, (c) => {
+  app.get("/v1/agents", free, cached, (c) => {
     const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 30);
     const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
     const q = (c.req.query("q") ?? "").slice(0, 80) || undefined;
     return c.json(analysis.agents({ limit, offset, q, onlyPaid: c.req.query("paid") === "1" }));
   });
 
-  app.get("/v1/agents/:id", free, (c) => {
+  app.get("/v1/agents/:id", free, cached, (c) => {
     const id = c.req.param("id");
     if (!/^\d{1,30}$/.test(id))
       return c.json({ error: "bad_agent_id", message: "Agent ids are integers." }, 400);
@@ -352,11 +353,50 @@ function usd(micros: bigint): string {
   return `$${(Number(micros) / 1e6).toFixed(3)}`;
 }
 
+/**
+ * Response cache for read-only routes, keyed by URL and tied to the analysis snapshot: when new
+ * blocks rebuild the snapshot every entry is dropped, so nothing stale is ever served. Bounded,
+ * oldest entries evicted first. Only 200 answers are kept.
+ */
+export function snapshotCache(version: () => number, maxEntries: number): MiddlewareHandler {
+  const store = new Map<string, { body: string; type: string }>();
+  let current = -1;
+  return async (c, next) => {
+    const v = version();
+    if (v !== current) {
+      store.clear();
+      current = v;
+    }
+    const key = c.req.url.slice(c.req.url.indexOf("/", 8));
+    const hit = store.get(key);
+    if (hit) {
+      c.header("x-cache", "hit");
+      return c.body(hit.body, 200, { "content-type": hit.type });
+    }
+    await next();
+    if (c.res.status !== 200) return;
+    const type = c.res.headers.get("content-type") ?? "application/json";
+    const body = await c.res.clone().text();
+    if (store.size >= maxEntries) store.delete(store.keys().next().value as string);
+    store.set(key, { body, type });
+  };
+}
+
 /** Fixed-window limiter per client IP. Memory is swept every window. */
-export function rateLimit(perMinute: number): MiddlewareHandler {
+export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHandler {
   const hits = new Map<string, { n: number; reset: number }>();
+  const trusted = (c: Context) => {
+    if (!internalKey) return false;
+    const given = c.req.header("x-assay-internal") ?? "";
+    // Constant-time comparison so the key cannot be guessed byte by byte.
+    if (given.length !== internalKey.length) return false;
+    let diff = 0;
+    for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ internalKey.charCodeAt(i);
+    return diff === 0;
+  };
   let sweep = Date.now() + 60_000;
   return async (c, next) => {
+    if (trusted(c)) return next();
     const now = Date.now();
     if (now > sweep) {
       for (const [k, v] of hits) if (v.reset <= now) hits.delete(k);
