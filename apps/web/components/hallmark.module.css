@@ -1,0 +1,91 @@
+.row {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.3em;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.punch {
+  --cut: 0.28em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.3em;
+  padding: 0.38em 0.5em 0.34em;
+  clip-path: var(--punch);
+  background: var(--ink);
+  color: var(--ink-on-dark);
+}
+
+.oval {
+  --cut: 0.5em;
+  font-weight: 600;
+}
+
+.grade {
+  min-width: 2.1em;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.grade[data-rating="D"],
+.grade[data-rating="CCC"] {
+  background: var(--ink);
+  color: var(--accent);
+}
+
+.grade[data-rating="NR"] {
+  background: var(--silver);
+  color: var(--ink);
+}
+
+.low {
+  color: var(--accent);
+}
+
+.dark .punch {
+  background: var(--ink-on-dark);
+  color: var(--ink);
+}
+
+.dark .low {
+  color: var(--negative);
+}
+
+.dark .grade {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.accent .punch {
+  background: var(--ink);
+}
+
+.sm {
+  font-size: 0.8125rem;
+}
+
+.md {
+  font-size: 1rem;
+}
+
+.lg {
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+}
+
+.xl {
+  font-size: clamp(2rem, 6vw, 5.5rem);
+}
+
+/* The maker's mark is the Assay logo, scaled to the row's cap height. */
+.maker svg {
+  width: 0.95em;
+  height: 0.95em;
+}
+
+.fluid {
+  font-size: inherit;
+}

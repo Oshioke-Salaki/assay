@@ -1,0 +1,113 @@
+.field {
+  position: relative;
+  min-height: 84svh;
+  overflow: hidden;
+  padding: 72px var(--margin);
+  background: var(--silver);
+  color: var(--ink);
+  transition: background-color 420ms var(--ease-out);
+}
+
+.organicField {
+  background: var(--gold);
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+  max-width: 36ch;
+}
+
+.head {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.sentence {
+  margin-top: 16px;
+  font-size: var(--step-body);
+}
+
+/* The control, built in em and blown up through font-size. */
+.control {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  position: absolute;
+  right: var(--margin);
+  bottom: 56px;
+  font-size: clamp(2.25rem, 6.4vw, 7.5rem);
+  width: 8.6em;
+  max-width: calc(100% - 2 * var(--margin));
+}
+
+.track {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 1.8em;
+  padding: 0.12em;
+  background: var(--touchstone);
+  --cut: 0.32em;
+  clip-path: var(--punch);
+}
+
+.seg {
+  position: relative;
+  border: 0;
+  background: transparent;
+  font-size: 0.5em;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--muted-on-dark);
+  cursor: pointer;
+  --cut: 0.5em;
+  clip-path: var(--punch);
+  transition:
+    color var(--t-hover) ease,
+    background-color 260ms var(--ease-out);
+}
+
+.seg[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.seg:focus-visible {
+  outline-offset: -0.2em;
+}
+
+.value {
+  margin-top: 0.12em;
+  font-size: 1.6em;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  white-space: nowrap;
+}
+
+.fallback {
+  position: relative;
+  margin-top: 24px;
+  font-size: var(--step-lead);
+}
+
+@media (max-width: 860px) {
+  .field {
+    min-height: 0;
+    padding: 56px var(--margin) 48px;
+  }
+
+  .control {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+    margin-top: 40px;
+    font-size: 10vw;
+    width: 100%;
+  }
+}

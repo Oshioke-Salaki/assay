@@ -1,0 +1,62 @@
+.wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  background: var(--app-control);
+}
+
+.bar > span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.organic {
+  background: var(--data);
+}
+
+.loop {
+  background: var(--ink);
+}
+
+.funded {
+  /* 1px diagonal hatch: self-funded money is struck, not just a lighter tone. */
+  background-color: #8f9198;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M-1 1l2-2M0 6l6-6M5 7l2-2' stroke='%23141414' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--step-small);
+  color: var(--app-muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
+.value {
+  color: var(--ink);
+}
+
+.empty {
+  color: var(--app-muted);
+  font-size: var(--step-small);
+}

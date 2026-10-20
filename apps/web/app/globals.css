@@ -1,0 +1,231 @@
+/*
+ * Assay design tokens.
+ * Direction "One motif" (seed 409584615) with colours taken from the assay world instead of the dealt
+ * pastels: touchstone black, silver, assay gold, cupel ash, slate. One accent, Celo yellow, on actions
+ * and the hallmark. The motif is the hallmark punch: a cartouche with clipped corners (--punch).
+ * App screens use the Achromatic ledger style (seed 865336694) with organic revenue in assay gold.
+ */
+:root {
+  /* Page palette */
+  --touchstone: #161719;
+  --touchstone-2: #222428;
+  --silver: #d6d9dd;
+  --gold: #e9dda9;
+  --ash: #e6e5e2;
+  --slate: #3b3e44;
+  --ink: #141414;
+  --ink-on-dark: #f0f0ee;
+  --muted: #4a4d55;
+  --muted-on-dark: #b9bbc0;
+  --accent: #fcff52;
+  --accent-ink: #141414;
+
+  /* App palette (ledger) */
+  --app-ground: #f2f3f4;
+  --app-card: #ffffff;
+  --app-rule: #e3e4e6;
+  --app-control: #e7e8ea;
+  --app-muted: #5d6068;
+  --data: #8a6d00;
+  --data-pale: #efe6c4;
+  --negative: #b42318;
+  --positive: #1f7a3a;
+
+  /* Type: Schibsted Grotesk, five steps */
+  --font: var(--font-schibsted), "Schibsted Grotesk", system-ui, sans-serif;
+  --step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+  --step-display: clamp(5.5rem, 10vw, 10rem);
+
+  /* Frame */
+  --margin: clamp(16px, 2.2vw, 32px);
+  --gutter: clamp(12px, 1.6vw, 24px);
+  --section: clamp(120px, 14vw, 200px);
+  --radius: 0px;
+
+  /* The motif: a hallmark punch. --cut is the clipped corner. */
+  --cut: 0.22em;
+  --punch: polygon(
+    var(--cut) 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut)),
+    0 var(--cut)
+  );
+
+  /* Motion */
+  --t-hover: 160ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--step-body);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  background: var(--touchstone);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The one button shape: a punch. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  min-height: 48px;
+  padding: 0 1.4em;
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: var(--step-body);
+  text-decoration: none;
+  cursor: pointer;
+  clip-path: var(--punch);
+  --cut: 10px;
+  transition:
+    transform var(--t-hover) var(--ease-out),
+    background-color var(--t-hover) ease;
+}
+
+.btn:hover {
+  background: #f0f33a;
+}
+
+.btn:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.btn[disabled] {
+  cursor: not-allowed;
+  background: #d9d9c0;
+  color: #55554a;
+}
+
+.btn--ink {
+  background: var(--ink);
+  color: var(--ink-on-dark);
+}
+
+.btn--ink:hover {
+  background: #2c2c2c;
+}
+
+.btn--quiet {
+  background: var(--app-control);
+  color: var(--ink);
+}
+
+.btn--quiet:hover {
+  background: #dcdde0;
+}
+
+.link {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--t-hover) ease;
+}
+
+.link:hover {
+  text-decoration-color: transparent;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every component duration */
+    transition-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every component duration */
+    animation-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every component duration */
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Entrances (see components/Reveal.tsx). Visible unless the script opts an element in. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-wait {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  .reveal-wait.reveal-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 620ms var(--ease-out),
+      transform 720ms var(--ease-out);
+  }
+}

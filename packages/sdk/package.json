@@ -1,0 +1,35 @@
+{
+  "name": "@assay/sdk",
+  "version": "0.1.0",
+  "description": "Check Celo x402 sellers with Assay before paying them. Includes a drop-in guard for any x402 fetch client.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "x402",
+    "celo",
+    "erc-8004",
+    "agents",
+    "reputation",
+    "credit"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@assay/core": "workspace:*"
+  }
+}

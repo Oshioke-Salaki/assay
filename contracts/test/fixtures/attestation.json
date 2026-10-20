@@ -1,0 +1,14 @@
+{
+  "registry": "0x000000000000000000000000000000000000a55a",
+  "signer": "0x5d5c99edf529335160ff180fa141dd4967fc00d2",
+  "subject": "0x5555555555555555555555555555555555555555",
+  "score": 84,
+  "rating": 7,
+  "organicUsdMicros": "15000000",
+  "grossUsdMicros": "15000000",
+  "effectivePayersX100": 1200,
+  "asOfBlock": "80000000",
+  "issuedAt": "1791500000",
+  "expiresAt": "1792104800",
+  "signature": "0x94c8db21b6f61c67ca0212e6264bd6dd7a3a581d4ae402d4cf71abf58b57495d27e453c707123705014ea970208c0026f030ee9720bcaa5d0d553f7ff93009221b"
+}

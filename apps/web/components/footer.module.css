@@ -1,0 +1,110 @@
+.footer {
+  padding: 96px var(--margin) 32px;
+  background: var(--touchstone);
+  color: var(--ink-on-dark);
+}
+
+.word {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 34svh;
+  min-height: 200px;
+}
+
+.block {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.04em;
+  font-weight: 800;
+  font-size: clamp(4rem, 15vw, 15rem);
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  overflow: hidden;
+  clip-path: var(--punch);
+  --cut: 18px;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--gutter);
+  margin-top: 56px;
+}
+
+.cols > div {
+  grid-column: span 2;
+}
+
+.cols > .contact {
+  grid-column: 9 / span 4;
+}
+
+.colTitle {
+  margin-bottom: 12px;
+  font-size: var(--step-small);
+  font-weight: 600;
+  color: var(--muted-on-dark);
+}
+
+.cols ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+}
+
+.cols a {
+  text-decoration: none;
+}
+
+.cols a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.contact p {
+  font-size: 0.9375rem;
+  max-width: 36ch;
+}
+
+.credits {
+  margin-top: 56px;
+  max-width: 120ch;
+  font-size: var(--step-small);
+  color: var(--muted-on-dark);
+}
+
+.last {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 32px;
+  font-size: var(--step-small);
+  color: var(--muted-on-dark);
+}
+
+.last :global(.btn) {
+  min-height: 40px;
+  font-size: 0.9375rem;
+}
+
+@media (max-width: 860px) {
+  .word {
+    height: 22svh;
+    min-height: 140px;
+  }
+
+  .cols > div {
+    grid-column: span 6;
+  }
+
+  .cols > .contact {
+    grid-column: 1 / -1;
+  }
+}

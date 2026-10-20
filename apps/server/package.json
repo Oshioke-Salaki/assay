@@ -1,0 +1,35 @@
+{
+  "name": "@assay/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "backfill": "tsx src/scripts/backfill.ts",
+    "inspect": "tsx src/scripts/inspect.ts",
+    "ops": "tsx src/scripts/ops.ts",
+    "fixture:attestation": "tsx src/scripts/attestation-fixture.ts"
+  },
+  "dependencies": {
+    "@assay/core": "workspace:*",
+    "@celo/attribution-tags": "0.5.0",
+    "@hono/node-server": "2.1.5",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/extensions": "2.28.0",
+    "@x402/fetch": "2.28.0",
+    "@x402/hono": "2.28.0",
+    "better-sqlite3": "13.0.3",
+    "hono": "4.13.13",
+    "viem": "2.57.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "4.23.15"
+  }
+}

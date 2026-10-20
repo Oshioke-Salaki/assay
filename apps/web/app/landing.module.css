@@ -1,0 +1,854 @@
+/* ---------- Hero: touchstone ground, a stack of punch-cut folders ---------- */
+.hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--touchstone);
+  color: var(--ink-on-dark);
+  overflow: hidden;
+}
+
+.heroCopy {
+  padding: clamp(24px, 5vh, 64px) var(--margin) 0;
+  text-align: center;
+}
+
+.title {
+  font-size: var(--step-display);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 0.82;
+}
+
+.lede {
+  max-width: 46ch;
+  margin: 28px auto 0;
+  font-size: var(--step-lead);
+  line-height: 1.3;
+  color: var(--ink-on-dark);
+}
+
+.stack {
+  position: relative;
+  flex: 1;
+  min-height: 460px;
+  width: 86%;
+  margin: clamp(40px, 7vh, 88px) auto 0;
+}
+
+.folder {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100%;
+  min-height: 440px;
+  --cut: 22px;
+  clip-path: polygon(
+    0 var(--cut),
+    var(--cut) 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    0 100%
+  );
+  text-decoration: none;
+  color: var(--ink);
+  transition: transform var(--t-hover) var(--ease-out);
+}
+
+.folder:hover {
+  transform: translateY(-6px);
+}
+
+.folderDark {
+  color: var(--ink-on-dark);
+}
+
+.tab {
+  position: absolute;
+  top: 0;
+  left: var(--tab-x, 8%);
+  padding: 14px 18px 12px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.front {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 224px;
+  min-height: calc(100% - 160px);
+  padding: 72px clamp(24px, 3vw, 40px) 64px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  --cut: 28px;
+  clip-path: polygon(
+    0 var(--cut),
+    var(--cut) 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    0 100%
+  );
+}
+
+.front .tab {
+  left: auto;
+  right: 32px;
+  top: 12px;
+  padding: 0;
+  font-weight: 800;
+}
+
+.frontGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 64px);
+  align-items: start;
+}
+
+.frontHead {
+  font-size: var(--step-head);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  max-width: 14ch;
+}
+
+.frontLine {
+  margin-top: 20px;
+  max-width: 44ch;
+  font-size: var(--step-body);
+}
+
+.frontForm {
+  padding-top: 6px;
+}
+
+.tryLine {
+  margin-top: 4px;
+  font-size: var(--step-small);
+  font-weight: 600;
+}
+
+/* ---------- Intro: the statement with inline punch-shaped frames ---------- */
+.intro {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--gutter);
+  align-items: end;
+  padding: var(--section) var(--margin);
+  background: var(--ash);
+  color: var(--ink);
+}
+
+.statement {
+  grid-column: 1 / span 8;
+  font-size: clamp(1.5rem, 2.4vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  max-width: 34ch;
+}
+
+.thumb {
+  display: inline-block;
+  width: 1.25em;
+  height: 0.85em;
+  margin: 0 0.12em;
+  vertical-align: -0.1em;
+  overflow: hidden;
+  --cut: 0.16em;
+  clip-path: var(--punch);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.introPlate {
+  grid-column: 9 / span 2;
+  margin: 0;
+}
+
+.introPlate2 {
+  grid-column: 11 / span 2;
+  margin: 0;
+}
+
+.introPlate img,
+.introPlate2 video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  --cut: 18px;
+  clip-path: var(--punch);
+}
+
+.introPlate figcaption,
+.introPlate2 figcaption {
+  margin-top: 10px;
+  font-size: var(--step-small);
+  color: var(--muted);
+}
+
+/* ---------- The test: four fields, one card further along each time ---------- */
+.test {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.testField {
+  position: relative;
+  min-height: 72svh;
+  padding: 32px var(--margin) 28px;
+  color: var(--ink);
+}
+
+.testDark {
+  color: var(--ink-on-dark);
+}
+
+.testHead {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.card {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: min(260px, calc(100% - 32px));
+  translate: -50% 0;
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  background: #ffffff;
+  color: var(--ink);
+  --cut: 14px;
+  clip-path: var(--punch);
+  transition: transform var(--t-hover) var(--ease-out);
+}
+
+.testField:hover .card {
+  transform: translateY(-6px);
+}
+
+.cardLabel {
+  font-size: var(--step-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cardFig {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.cardMeta {
+  font-size: var(--step-small);
+  color: var(--muted);
+}
+
+.clause {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  bottom: 28px;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  max-width: 12ch;
+}
+
+/* ---------- Sellers index ---------- */
+.sellers {
+  padding: var(--section) var(--margin);
+  background: var(--touchstone);
+  color: var(--ink-on-dark);
+}
+
+.sellersHead {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--gutter);
+  margin-bottom: 48px;
+}
+
+.sectionHead {
+  grid-column: 1 / span 7;
+  font-size: var(--step-head);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+.sectionLine {
+  grid-column: 8 / span 5;
+  align-self: end;
+  font-size: var(--step-body);
+  max-width: 44ch;
+}
+
+.sellersMore {
+  margin-top: 40px;
+  font-weight: 600;
+}
+
+/* ---------- Inside a report: a board of close-ups ---------- */
+.board {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 104px;
+  gap: 8px;
+  padding: 10px;
+  background: var(--touchstone);
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: var(--ink);
+  --cut: 16px;
+  clip-path: var(--punch);
+}
+
+.t6x4 {
+  grid-column: span 6;
+  grid-row: span 4;
+}
+
+.t6x2 {
+  grid-column: span 6;
+  grid-row: span 2;
+}
+
+.t3x4 {
+  grid-column: span 3;
+  grid-row: span 4;
+}
+
+.t3x2 {
+  grid-column: span 3;
+  grid-row: span 2;
+}
+
+.tileAccent {
+  background: var(--accent);
+  justify-content: flex-start;
+}
+
+.boardHead {
+  font-size: clamp(2.25rem, 4vw, 3.75rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+.macro {
+  position: absolute;
+  font-size: 2.6em;
+  line-height: 1.1;
+  max-width: calc(100% - 40px);
+  pointer-events: none;
+}
+
+.tileName {
+  position: relative;
+  font-size: var(--step-body);
+  font-weight: 600;
+}
+
+.tileLine {
+  position: relative;
+  margin-top: 2px;
+  font-size: 1rem;
+  max-width: 34ch;
+}
+
+.flagBlock {
+  display: inline-block;
+  padding: 0.25em 0.45em;
+  background: var(--ink);
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  --cut: 0.2em;
+  clip-path: var(--punch);
+}
+
+.keyline {
+  display: block;
+  font-size: 0.4em;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.keycap {
+  display: inline-block;
+  padding: 0.2em 0.4em;
+  background: var(--ink);
+  color: var(--ink-on-dark);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  --cut: 0.18em;
+  clip-path: var(--punch);
+}
+
+.verdict {
+  display: inline-block;
+  padding: 0.18em 0.42em 0.24em;
+  background: var(--ink);
+  color: var(--accent);
+  font-size: 1.4em;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  --cut: 0.2em;
+  clip-path: var(--punch);
+}
+
+.human {
+  display: inline-block;
+  padding: 0.2em 0.45em;
+  background: var(--data);
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  --cut: 0.2em;
+  clip-path: var(--punch);
+}
+
+.bigNum {
+  font-size: 1.4em;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+
+/* ---------- Open rails ---------- */
+.rails {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: var(--section) var(--margin);
+  background: var(--silver);
+}
+
+.railTile {
+  aspect-ratio: 3 / 2;
+  padding: 24px;
+  background: #e2e5e8;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  --cut: 16px;
+  clip-path: var(--punch);
+}
+
+.railHead {
+  grid-column: span 2;
+  aspect-ratio: auto;
+  background: var(--accent);
+}
+
+.railName {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+/* ---------- Pricing: two fields that meet at a hard edge ---------- */
+.pricing {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+}
+
+.plan {
+  position: relative;
+  min-height: 58svh;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+}
+
+.planName {
+  font-size: var(--step-head);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+}
+
+.planFor {
+  margin-top: 16px;
+  max-width: 26ch;
+  font-size: var(--step-lead);
+  line-height: 1.25;
+}
+
+.planIncludes {
+  margin-top: 24px;
+  max-width: 40ch;
+  font-size: var(--step-lead);
+  line-height: 1.3;
+}
+
+.planFoot {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.price {
+  font-size: var(--step-display);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 0.82;
+}
+
+.per {
+  margin-left: 0.3em;
+  font-size: var(--step-body);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+/* ---------- Close: the action tile cropped from a longer row ---------- */
+.close {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+  padding: 120px 0 0;
+  background: var(--touchstone);
+  overflow: clip;
+}
+
+.closeFlank {
+  grid-column: span 2;
+  height: 360px;
+  overflow: hidden;
+  --cut: 18px;
+  clip-path: var(--punch);
+}
+
+.closeFlank:first-child {
+  margin-left: -40px;
+}
+
+.closeFlank:last-child {
+  margin-right: -40px;
+}
+
+.closeFlank img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.closeTile {
+  grid-column: span 8;
+  height: 360px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  --cut: 18px;
+  clip-path: var(--punch);
+}
+
+.closeHead {
+  font-size: var(--step-head);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.closeLine {
+  max-width: 52ch;
+  font-size: var(--step-body);
+  margin-bottom: 8px;
+}
+
+/* ---------- Phone ---------- */
+@media (max-width: 860px) {
+  .stack {
+    width: 100%;
+    margin-top: 40px;
+    min-height: 0;
+  }
+
+  .folder {
+    min-height: 0;
+  }
+
+  .tab {
+    font-size: 0.9375rem;
+    padding: 10px 14px 8px;
+  }
+
+  .stack .tab {
+    display: none;
+  }
+
+  .front {
+    position: relative;
+    top: auto;
+    min-height: 0;
+    margin-top: 104px;
+    padding: 56px 20px 40px;
+  }
+
+  .frontGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .intro {
+    padding: 96px var(--margin);
+  }
+
+  .statement {
+    grid-column: 1 / -1;
+    font-size: 1.5rem;
+  }
+
+  .introPlate {
+    grid-column: 1 / span 7;
+  }
+
+  .introPlate2 {
+    grid-column: 8 / span 5;
+  }
+
+  .test {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .testField {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 28px 20px 32px;
+  }
+
+  .card {
+    position: static;
+    translate: none;
+    order: 2;
+  }
+
+  .clause {
+    position: static;
+    order: 1;
+    font-size: 1.5rem;
+  }
+
+  .sellersHead {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHead,
+  .sectionLine {
+    grid-column: 1 / -1;
+  }
+
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 112px;
+    gap: 6px;
+  }
+
+  .t6x4,
+  .t6x2 {
+    grid-column: span 2;
+    grid-row: span 3;
+  }
+
+  .tileAccent {
+    grid-row: span 2;
+  }
+
+  .t3x4,
+  .t3x2 {
+    grid-column: span 1;
+    grid-row: span 2;
+  }
+
+  .t3x2 .tileLine,
+  .t3x4 .tileLine {
+    display: block;
+  }
+
+  .rails {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .railTile {
+    padding: 16px;
+    aspect-ratio: auto;
+    min-height: 150px;
+    gap: 16px;
+  }
+
+  .railTile .tileLine {
+    font-size: 1rem;
+  }
+
+  .railHead {
+    aspect-ratio: auto;
+    min-height: 120px;
+  }
+
+  .railName {
+    font-size: 1.25rem;
+  }
+
+  .pricing {
+    grid-template-columns: 1fr;
+  }
+
+  .plan {
+    min-height: 0;
+    padding: 32px 20px;
+    gap: 0;
+  }
+
+  .plan:last-child {
+    order: -1;
+  }
+
+  .planFoot :global(.btn) {
+    width: 100%;
+  }
+
+  .close {
+    grid-template-columns: 1fr 1fr;
+    padding-top: 96px;
+  }
+
+  .closeTile {
+    grid-column: 1 / -1;
+    order: -1;
+    height: auto;
+    min-height: 300px;
+    padding: 28px 20px;
+  }
+
+  .closeHead {
+    font-size: 1.75rem;
+  }
+
+  .closeFlank {
+    grid-column: span 1;
+    height: 120px;
+  }
+
+  .closeFlank:first-child,
+  .closeFlank:last-child {
+    margin: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .test {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The one moving picture: the foundry clip; it holds still on its poster under reduced motion. */
+.introPlate2 video {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .introPlate2 video {
+    display: none;
+  }
+
+  .introPlate2 .still {
+    display: block;
+  }
+}
+
+.still {
+  display: none;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  --cut: 18px;
+  clip-path: var(--punch);
+}
+
+/* The hallmark close-up scales with its tile so the row fills it at every width. */
+.hallmarkMacro {
+  left: 20px;
+  top: 24px;
+  font-size: clamp(1.75rem, 4.4vw, 4.25rem);
+}
+
+@media (max-width: 860px) {
+  .hallmarkMacro {
+    font-size: 8.6vw;
+  }
+
+  .macro {
+    font-size: 1.9em;
+  }
+
+  .testField {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .planFoot {
+    margin-top: 40px;
+  }
+
+  .t6x2:not(.tileAccent) {
+    grid-row: span 2;
+  }
+
+  .keycap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 560px) {
+  .t3x2 .tileLine,
+  .t3x4 .tileLine {
+    display: none;
+  }
+
+  .board {
+    grid-auto-rows: 96px;
+  }
+}
