@@ -4,6 +4,7 @@ import { ERC8004_IDENTITY_REGISTRY, ERC8004_REPUTATION_REGISTRY, reputationRegis
 import { useEffect, useState } from "react";
 import { keccak256, stringToBytes, toHex } from "viem";
 import styles from "@/components/app.module.css";
+import { useToast } from "@/components/Toaster";
 import { API_PUBLIC } from "@/lib/api";
 import { date, short, txUrl, usd } from "@/lib/format";
 import { WalletProviders } from "./Providers";
@@ -45,6 +46,7 @@ export function ReviewForm({ agentId }: { agentId: string }) {
  */
 function Inner({ agentId }: { agentId: string }) {
   const w = useWallet();
+  const toast = useToast();
   const [loaded, setLoaded] = useState<PaymentsResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [proof, setProof] = useState<string>("");
@@ -149,8 +151,16 @@ function Inner({ agentId }: { agentId: string }) {
       const receipt = await w.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("The registry rejected the review.");
       setState({ kind: "done", hash });
+      toast({
+        tone: "success",
+        title: "Review recorded on Celo",
+        href: txUrl(hash),
+        hrefLabel: "View transaction",
+      });
     } catch (err) {
-      setState({ kind: "error", text: walletErrorMessage(err) });
+      const text = walletErrorMessage(err);
+      setState({ kind: "error", text });
+      toast({ tone: "error", title: "Review not sent", detail: text });
     }
   }
 

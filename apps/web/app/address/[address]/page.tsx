@@ -8,6 +8,7 @@ import { AssayBar } from "@/components/AssayBar";
 import styles from "@/components/app.module.css";
 import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
+import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
 import { type AddressResponse, API_PUBLIC, ApiError, api } from "@/lib/api";
 import { addressUrl, date, fineness, int, pct, RATING_WORDS, short, txUrl, usd } from "@/lib/format";
@@ -273,67 +274,14 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
         action={
           <span className={styles.muted}>
             {int(s.payers)} payer{s.payers === 1 ? "" : "s"}
-            {s.payerLinesTruncated ? ", top 100 shown" : ""}
           </span>
         }
       >
-        {s.payerLines.length === 0 ? (
-          <p className={styles.empty}>Nobody has paid this address over x402.</p>
-        ) : (
-          <div className={styles.scroll}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Payer</th>
-                  <th>Counted as</th>
-                  <th className={styles.r}>Paid</th>
-                  <th className={styles.r}>Counted</th>
-                  <th className={`${styles.r} ${styles.hideSm}`}>Payments</th>
-                  <th className={styles.hideSm}>Funded by</th>
-                  <th className={`${styles.r} ${styles.hideSm}`}>Last</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.payerLines.map((l) => (
-                  <tr key={l.payer}>
-                    <td>
-                      <Link href={`/address/${l.payer}`}>{short(l.payer)}</Link>
-                      {l.human ? <span className={styles.muted}> · human</span> : null}
-                    </td>
-                    <td>
-                      <span
-                        className={`${styles.pill} ${l.class === "organic" ? styles.pillGood : l.class === "loop" ? styles.pillWarn : styles.pillBad}`}
-                      >
-                        {l.class === "organic"
-                          ? l.established
-                            ? "Organic, established"
-                            : "Organic"
-                          : l.class === "loop"
-                            ? "In its loop"
-                            : l.class === "seller-funded"
-                              ? "Seller funded it"
-                              : "Shares its funder"}
-                      </span>
-                    </td>
-                    <td className={styles.r}>{usd(l.usd)}</td>
-                    <td className={styles.r} style={{ color: l.creditedUsd > 0 ? "var(--data)" : undefined }}>
-                      {usd(l.creditedUsd)}
-                    </td>
-                    <td className={`${styles.r} ${styles.hideSm}`}>{int(l.count)}</td>
-                    <td className={styles.hideSm}>
-                      {l.funder ? (
-                        <Link href={`/address/${l.funder}`}>{short(l.funder)}</Link>
-                      ) : (
-                        <span className={styles.dash}>–</span>
-                      )}
-                    </td>
-                    <td className={`${styles.r} ${styles.hideSm}`}>{date(l.lastTs)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <PayersTable
+          address={address}
+          total={s.payers}
+          initial={{ total: s.payers, rows: s.payerLines.slice(0, 20) }}
+        />
       </Panel>
 
       {b.counterparties.length > 0 ? (
@@ -342,38 +290,11 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
           span={12}
           action={<span className={styles.muted}>{int(b.sellers)} sellers</span>}
         >
-          <div className={styles.scroll}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Seller</th>
-                  <th className={styles.r}>Paid</th>
-                  <th className={`${styles.r} ${styles.hideSm}`}>Payments</th>
-                  <th>Relationship</th>
-                  <th className={`${styles.r} ${styles.hideSm}`}>Last</th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.counterparties.map((c) => (
-                  <tr key={c.payee}>
-                    <td>
-                      <Link href={`/address/${c.payee}`}>{short(c.payee)}</Link>
-                    </td>
-                    <td className={styles.r}>{usd(c.usd)}</td>
-                    <td className={`${styles.r} ${styles.hideSm}`}>{int(c.count)}</td>
-                    <td>
-                      {c.inLoop ? (
-                        <span className={`${styles.pill} ${styles.pillWarn}`}>Pays it back</span>
-                      ) : (
-                        <span className={styles.muted}>Arm's length</span>
-                      )}
-                    </td>
-                    <td className={`${styles.r} ${styles.hideSm}`}>{date(c.lastTs)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CounterpartiesTable
+            address={address}
+            total={b.sellers}
+            initial={{ total: b.sellers, rows: b.counterparties.slice(0, 20) }}
+          />
         </Panel>
       ) : null}
 

@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Schibsted_Grotesk } from "next/font/google";
+import { Toaster } from "@/components/Toaster";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={schibsted.variable}>
       <body>
-        {children}
+        <Toaster>{children}</Toaster>
         <Analytics />
       </body>
     </html>

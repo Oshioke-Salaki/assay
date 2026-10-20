@@ -1,0 +1,111 @@
+.wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.search {
+  flex: 1 1 260px;
+  max-width: 420px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #cfd1d5;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 0.875rem;
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.chips {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-control);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--t-hover) ease;
+}
+
+.chip:hover:not(:disabled, [aria-pressed="true"]) {
+  background: #dcdde0;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--ink-on-dark);
+}
+
+.chip:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.count {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pager :global(.btn) {
+  min-height: 34px;
+  font-size: 0.8125rem;
+  padding: 0 12px;
+  --cut: 6px;
+}
+
+/* The previous page stays readable while the next one loads. */
+.stale {
+  opacity: 0.55;
+  transition: opacity var(--t-hover) ease;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* A shortened address reads as one token; it never breaks across lines. */
+.who {
+  white-space: nowrap;
+}

@@ -6,6 +6,7 @@ import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { useState } from "react";
 import styles from "@/components/app.module.css";
+import { useToast } from "@/components/Toaster";
 import { API_PUBLIC } from "@/lib/api";
 import { txUrl } from "@/lib/format";
 import { erc20BalanceAbi, REGISTRY_ADDRESS, registryAbi } from "./config";
@@ -29,6 +30,17 @@ interface Attested {
   } | null;
 }
 
+/**
+ * The x402 client adds an `Access-Control-Expose-Headers` header to its paid retry. That is a
+ * response header; sent on a request it fails the browser's CORS preflight on servers that do not
+ * list it, and the payment surfaces as "Failed to fetch". Strip it before the request leaves.
+ */
+const corsSafeFetch: typeof fetch = (input, init) => {
+  const req = new Request(input, init);
+  req.headers.delete("access-control-expose-headers");
+  return fetch(req);
+};
+
 export function PublishHallmark(props: { subject: `0x${string}`; rating: Rating }) {
   return (
     <WalletProviders>
@@ -44,6 +56,7 @@ export function PublishHallmark(props: { subject: `0x${string}`; rating: Rating 
 function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) {
   const w = useWallet();
   const [step, setStep] = useState<Step>({ kind: "idle" });
+  const toast = useToast();
   const configured = Boolean(REGISTRY_ADDRESS);
 
   async function run() {
@@ -89,7 +102,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
             client.signTypedData({ account, ...(m as Parameters<typeof client.signTypedData>[0]) }),
         }),
       );
-      const pay = wrapFetchWithPayment(fetch, payer);
+      const pay = wrapFetchWithPayment(corsSafeFetch, payer);
       const res = await pay(`${API_PUBLIC}/v1/attest/${subject}`);
       if (res.status === 503) throw new Error("Paid reports are not switched on for this Assay server yet.");
       if (!res.ok) throw new Error(`Assay answered ${res.status}. Nothing was published.`);
@@ -127,8 +140,16 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
           "The transaction reverted. Your $0.01 bought the signed score, which is still valid for 7 days.",
         );
       setStep({ kind: "done", hash });
+      toast({
+        tone: "success",
+        title: "Hallmark published on Celo",
+        href: txUrl(hash),
+        hrefLabel: "View transaction",
+      });
     } catch (err) {
-      setStep({ kind: "error", text: walletErrorMessage(err) });
+      const text = walletErrorMessage(err);
+      setStep({ kind: "error", text });
+      toast({ tone: "error", title: "Hallmark not published", detail: text });
     }
   }
 

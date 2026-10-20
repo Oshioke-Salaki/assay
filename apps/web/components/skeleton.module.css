@@ -1,0 +1,64 @@
+/* A flat tone that breathes, instead of a gradient sweep. */
+.bone {
+  display: block;
+  background: #e6e7e9;
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.rows {
+  display: grid;
+}
+
+.row {
+  display: grid;
+  gap: 16px;
+  align-items: center;
+  padding: 13px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--app-rule); /* taste-skill-ignore: app rule, table rows are split by 1px rules */
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone {
+    animation: none;
+  }
+}
+
+.screen {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 16px;
+}
+
+.head {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--app-card);
+}

@@ -1,0 +1,96 @@
+.stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A toast floats above the page, so it is the one place a shadow belongs. */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--ink-on-dark);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: 0.875rem;
+  animation: rise 220ms var(--ease-out);
+}
+
+.success {
+  border-left: 4px solid var(--accent);
+}
+
+.error {
+  border-left: 4px solid #f97066;
+}
+
+.info {
+  border-left: 4px solid var(--silver);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.detail {
+  margin-top: 2px;
+  color: var(--muted-on-dark);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-on-dark);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: #2a2a2a;
+  color: var(--ink-on-dark);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
