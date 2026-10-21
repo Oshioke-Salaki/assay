@@ -29,7 +29,13 @@ function errorCode(err: unknown): number | undefined {
  * real rejection (EIP-1193 code 4001); anything else shows the wallet's own words, so a failure is
  * never dressed up as something the person did.
  */
+/** A message Assay itself wrote for the visitor; shown as is, never attributed to the wallet. */
+export class AssayNotice extends Error {
+  override name = "AssayNotice";
+}
+
 export function walletErrorMessage(err: unknown): string {
+  if (err instanceof AssayNotice) return err.message;
   const e = err as { shortMessage?: string; message?: string; name?: string };
   const text = `${e?.name ?? ""} ${e?.shortMessage ?? ""} ${e?.message ?? ""}`;
   const code = errorCode(err);

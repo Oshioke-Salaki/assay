@@ -1,6 +1,6 @@
 # API
 
-Base URL: `https://api-production-63cc.up.railway.app` (or wherever you deploy your own server). All responses are JSON. Errors are `{ "error": "<code>", "message": "<sentence>" }`.
+Base URL: `https://api.assayscore.xyz` (or wherever you deploy your own server). All responses are JSON. Errors are `{ "error": "<code>", "message": "<sentence>" }`.
 
 ## Paid (x402 on Celo: USD₮ · USDC · USA₮ · wARS · wBRL · wCOP)
 

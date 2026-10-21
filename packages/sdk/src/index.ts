@@ -6,7 +6,7 @@ type Fetch = typeof fetch;
 type FetchInput = Parameters<typeof fetch>[0];
 
 /** The public Assay API on Celo mainnet. Pass `baseUrl` to use your own deployment instead. */
-export const DEFAULT_BASE_URL = "https://api-production-63cc.up.railway.app";
+export const DEFAULT_BASE_URL = "https://api.assayscore.xyz";
 
 export interface AssayOptions {
   /** Assay API origin. Default: the public Assay API, {@link DEFAULT_BASE_URL}. */

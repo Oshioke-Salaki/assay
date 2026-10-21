@@ -11,7 +11,7 @@ import styles from "@/components/app.module.css";
 import { useToast } from "@/components/Toaster";
 import { date, short, txUrl, usd } from "@/lib/format";
 import { WalletProviders } from "./Providers";
-import { useWallet, walletErrorMessage } from "./useWallet";
+import { AssayNotice, useWallet, walletErrorMessage } from "./useWallet";
 import { WalletPicker } from "./WalletPicker";
 
 interface Payment {
@@ -72,7 +72,7 @@ function Inner({ agentId }: { agentId: string }) {
     fetch(`/api/assay/v1/agents/${agentId}/payments/${w.address}`)
       .then(async (r) => {
         if (!r.ok)
-          throw new Error(
+          throw new AssayNotice(
             ((await r.json().catch(() => ({}))) as { message?: string }).message ?? `API ${r.status}`,
           );
         return (await r.json()) as PaymentsResponse;
@@ -93,12 +93,13 @@ function Inner({ agentId }: { agentId: string }) {
 
   async function checkPasted(): Promise<string> {
     const tx = pasted.trim();
-    if (!/^0x[0-9a-fA-F]{64}$/.test(tx)) throw new Error("A transaction hash is 0x and 64 hex characters.");
+    if (!/^0x[0-9a-fA-F]{64}$/.test(tx))
+      throw new AssayNotice("A transaction hash is 0x and 64 hex characters.");
     const r = await fetch(`/api/assay/v1/proof/${tx}`);
-    if (!r.ok) throw new Error("Could not check that transaction on Celo right now.");
+    if (!r.ok) throw new AssayNotice("Could not check that transaction on Celo right now.");
     const p = (await r.json()) as ProofResponse;
     if (!p.ok) {
-      throw new Error(
+      throw new AssayNotice(
         p.status === "pending"
           ? "That transaction is not mined yet. Wait a few seconds."
           : p.status === "not_found"
@@ -110,7 +111,7 @@ function Inner({ agentId }: { agentId: string }) {
       .filter(Boolean)
       .map((x) => x!.toLowerCase());
     const match = p.settlements.find((s) => s.payer === w.address && agentAddrs.includes(s.payee));
-    if (!match) throw new Error("In that transaction your wallet did not pay this agent.");
+    if (!match) throw new AssayNotice("In that transaction your wallet did not pay this agent.");
     return tx.toLowerCase();
   }
 
@@ -118,12 +119,12 @@ function Inner({ agentId }: { agentId: string }) {
     e.preventDefault();
     try {
       if (!w.address || !w.walletClient || !w.publicClient || !loaded)
-        throw new Error("Connect your wallet first.");
+        throw new AssayNotice("Connect your wallet first.");
       if (loaded.isOwner)
-        throw new Error("You own this agent. ERC-8004 does not let owners review themselves.");
+        throw new AssayNotice("You own this agent. ERC-8004 does not let owners review themselves.");
       setState({ kind: "working", text: "Checking your payment…" });
       const proofTx = proof === "paste" ? await checkPasted() : proof;
-      if (!proofTx) throw new Error("Pick the payment this review is about.");
+      if (!proofTx) throw new AssayNotice("Pick the payment this review is about.");
       const payee =
         loaded.payments.find((p) => p.txHash === proofTx)?.payee ?? loaded.agent.wallet ?? loaded.agent.owner;
       await w.ensureCelo();
@@ -152,7 +153,7 @@ function Inner({ agentId }: { agentId: string }) {
       });
       setState({ kind: "working", text: "Waiting for Celo to confirm…" });
       const receipt = await w.publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") throw new Error("The registry rejected the review.");
+      if (receipt.status !== "success") throw new AssayNotice("The registry rejected the review.");
       setState({ kind: "done", hash });
       toast({
         tone: "success",

@@ -5,8 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 
 const key = process.env.PAYER_KEY as `0x${string}`;
 const url =
-  process.argv[2] ??
-  "https://api-production-63cc.up.railway.app/v1/check/0x5df8ae2b963165b735b18ca86b1ea448d2aa032c";
+  process.argv[2] ?? "https://api.assayscore.xyz/v1/check/0x5df8ae2b963165b735b18ca86b1ea448d2aa032c";
 const account = privateKeyToAccount(key);
 const client = new x402Client(
   (_v, reqs) =>

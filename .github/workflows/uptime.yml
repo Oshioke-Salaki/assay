@@ -31,7 +31,7 @@ jobs:
         id: check
         continue-on-error: true
         env:
-          API_URL: ${{ vars.ASSAY_API_URL || 'https://api-production-63cc.up.railway.app' }}
+          API_URL: ${{ vars.ASSAY_API_URL || 'https://api.assayscore.xyz' }}
           WEB_URL: ${{ vars.ASSAY_WEB_URL || 'https://assayscore.xyz' }}
         run: |
           set -o pipefail

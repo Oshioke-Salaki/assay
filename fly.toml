@@ -1,0 +1,41 @@
+# Assay API on Fly.io: the same image Railway runs, one machine with the SQLite file on a volume.
+#   fly deploy --image ghcr.io/oshioke-salaki/assay-api:<sha>
+app = "assayscore-api"
+primary_region = "iad" # next to Vercel's default functions region
+
+[build]
+  image = "ghcr.io/oshioke-salaki/assay-api:latest"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8787"
+  DATABASE_PATH = "/data/assay.db"
+
+[[mounts]]
+  source = "assay_data"
+  destination = "/data"
+  initial_size = "5gb"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # One writer for the SQLite file: never stop it, never run two.
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 400
+    hard_limit = 1000
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "2gb"

@@ -26,6 +26,32 @@ pnpm --filter @assay/web start
 
 On Vercel set the project root to `apps/web`; the install runs at the monorepo root through pnpm workspaces. Environment: `NEXT_PUBLIC_ASSAY_API`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `NEXT_PUBLIC_ATTRIBUTION_TAG`.
 
+## Fly.io (current host)
+
+The API runs on Fly as app `assayscore-api` in `iad`, from the same image Railway built, with the SQLite file on the volume `assay_data` at `/data`. `fly.toml` at the repo root holds the config: one machine that never stops (one writer for SQLite), a `/health` check, 2 GB of memory (the server uses about 150 MB; the headroom is for the funding scan). `api.assayscore.xyz` is a CNAME to `assayscore-api.fly.dev`, with a certificate Fly issues.
+
+Deploy a new version by building the image and deploying it, no remote build needed:
+
+```sh
+docker buildx build --platform linux/amd64 -t ghcr.io/oshioke-salaki/assay-api:$(git rev-parse --short HEAD) --push .
+fly deploy --image ghcr.io/oshioke-salaki/assay-api:$(git rev-parse --short HEAD)
+```
+
+Secrets are set with `fly secrets set` (or `fly secrets import < file`); the server needs everything in `apps/server/.env.example` except `OPERATOR_PRIVATE_KEY`, which only the operator CLI uses.
+
+To move the database between hosts, copy it consistently and swap it in while the old file is out of the way:
+
+```sh
+sqlite3 assay.db ".backup seed.db" && gzip -1 seed.db
+echo "put seed.db.gz /data/seed.db.gz" | fly ssh sftp shell
+fly ssh console -C "sh -c 'gunzip -c /data/seed.db.gz > /data/seed.db && mv /data/seed.db /data/assay.db && rm -f /data/assay.db-wal /data/assay.db-shm /data/seed.db.gz'"
+fly machine restart <id>
+```
+
+The indexer resumes from the copy's cursor and catches up on its own.
+
+**Back to Railway.** Railway's `api` service is the same image and its own database. To switch back: point the `api` CNAME at the Railway target (`05lpg5us.up.railway.app`; the `_railway-verify.api` TXT record is already in place), wait for its certificate, and stop the Fly machine (`fly scale count 0`) so only one server runs enrichment from the agent wallet. If Fly ran for a while first, carry its database over the same way.
+
 ## Monitoring
 
 `.github/workflows/uptime.yml` runs `scripts/uptime.mjs` every 10 minutes. It checks:

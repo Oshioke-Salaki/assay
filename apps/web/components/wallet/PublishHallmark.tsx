@@ -11,7 +11,7 @@ import { useToast } from "@/components/Toaster";
 import { txUrl } from "@/lib/format";
 import { erc20BalanceAbi, REGISTRY_ADDRESS, registryAbi } from "./config";
 import { WalletProviders } from "./Providers";
-import { useWallet, walletErrorMessage } from "./useWallet";
+import { AssayNotice, useWallet, walletErrorMessage } from "./useWallet";
 import { WalletPicker } from "./WalletPicker";
 
 interface Offer {
@@ -22,9 +22,11 @@ interface Offer {
 /** The tokens and amounts the server's 402 asks for, in the server's order (USD₮ first). */
 async function priceList(url: string): Promise<Offer[]> {
   const res = await corsSafeFetch(url);
-  if (res.status === 503) throw new Error("Paid reports are not switched on for this Assay server yet.");
+  if (res.status === 503)
+    throw new AssayNotice("Paid reports are not switched on for this Assay server yet.");
   const header = res.headers.get("payment-required");
-  if (res.status !== 402 || !header) throw new Error(`Assay answered ${res.status} instead of a price.`);
+  if (res.status !== 402 || !header)
+    throw new AssayNotice(`Assay answered ${res.status} instead of a price.`);
   const required = JSON.parse(atob(header)) as { accepts?: { asset: string; amount: string }[] };
   return (required.accepts ?? []).flatMap((a) => {
     const token = tokenByAddress(a.asset);
@@ -85,7 +87,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       await w.ensureCelo();
       const client = w.walletClient;
       const pub = w.publicClient;
-      if (!client || !pub || !w.address) throw new Error("Wallet not ready yet. Try again.");
+      if (!client || !pub || !w.address) throw new AssayNotice("Wallet not ready yet. Try again.");
       const account = w.address;
 
       setStep({ kind: "working", text: "Checking your stablecoin balances…" });
@@ -107,7 +109,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       // The first token in the server's order that this wallet can cover.
       const offer = offers.find((o, i) => (balances[i] ?? 0n) >= o.amount);
       if (!offer)
-        throw new Error(
+        throw new AssayNotice(
           `This wallet cannot cover $0.01 in ${offers.map((o) => o.token.symbol).join(", ")} on Celo. Top up a little and try again.`,
         );
 
@@ -143,10 +145,10 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
         });
       const pay = wrapFetchWithPayment(corsSafeFetch, payer);
       const res = await pay(url);
-      if (!res.ok) throw new Error(`Assay answered ${res.status}. Nothing was published.`);
+      if (!res.ok) throw new AssayNotice(`Assay answered ${res.status}. Nothing was published.`);
       const body = (await res.json()) as Attested;
       if (!body.attestation)
-        throw new Error("This server has no attester key, so it cannot sign a hallmark yet.");
+        throw new AssayNotice("This server has no attester key, so it cannot sign a hallmark yet.");
 
       setStep({ kind: "working", text: "Publishing the hallmark. Confirm the transaction in your wallet…" });
       const m = body.attestation.message;
@@ -174,7 +176,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       setStep({ kind: "working", text: "Waiting for Celo to confirm…" });
       const receipt = await pub.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success")
-        throw new Error(
+        throw new AssayNotice(
           "The transaction reverted. Your $0.01 bought the signed score, which is still valid for 7 days.",
         );
       setStep({ kind: "done", hash });

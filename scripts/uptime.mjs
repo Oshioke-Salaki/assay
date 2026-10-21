@@ -3,7 +3,7 @@
 // for payment, and the site renders. Exits 1 with a report on stdout when anything is wrong.
 //   API_URL=https://… WEB_URL=https://… node scripts/uptime.mjs
 
-const API = (process.env.API_URL ?? "https://api-production-63cc.up.railway.app").replace(/\/+$/, "");
+const API = (process.env.API_URL ?? "https://api.assayscore.xyz").replace(/\/+$/, "");
 const WEB = (process.env.WEB_URL ?? "https://assayscore.xyz").replace(/\/+$/, "");
 // Celo makes a block a second; half an hour behind means the indexer is stuck, not just busy.
 const MAX_LAG_BLOCKS = Number(process.env.MAX_LAG_BLOCKS ?? 1800);
