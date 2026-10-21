@@ -39,6 +39,28 @@ fly deploy --image ghcr.io/oshioke-salaki/assay-api:$(git rev-parse --short HEAD
 
 Secrets are set with `fly secrets set` (or `fly secrets import < file`); the server needs everything in `apps/server/.env.example` except `OPERATOR_PRIVATE_KEY`, which only the operator CLI uses.
 
+### RPC
+
+`RPC_URL` on Fly is a Chainstack Celo endpoint (Growth plan: 250 requests a second). The server falls back to forno, then Ankr, if it fails. Chosen by `scripts/rpc-bench.mjs`, run on the Fly machine on 21 Oct 2026 (two runs, same results):
+
+| From Fly iad | Chainstack | forno | Ankr |
+| --- | --- | --- | --- |
+| eth_blockNumber p50 / p95 | 2 / 5 ms | 83 / 96 ms | 11 / 16 ms |
+| Receipt (proof check) p50 | 3 ms | 87 ms, 1 error in 10 | 11 ms |
+| Archive call, 12 months back | 8 ms | 300 ms | 15 ms |
+| 20 req/s for 10 s, p95 | 5 ms, 200/200 | 239 ms, 200/200 | 16 ms, 200/200 |
+| Settlement logs, 2,000 blocks | 250–490 ms | 90–280 ms | refused: range too large |
+| Largest log range | 10,000 blocks | under 10,000 | under 2,000 |
+| "finalized" behind latest | about 1,150 blocks (true L1 finality) | about 39,000 blocks (11 hours) | about 1,150 |
+
+Logs, receipts and archive reads matched across providers by content hash. The finality row matters most: the indexer's RPC fallback (used when the SQD portal fails) only reads up to "finalized", so on forno it would run 11 hours behind. Rerun it any time:
+
+```sh
+fly ssh console -a assayscore-api -q -C "node --input-type=module -" < scripts/rpc-bench.mjs
+```
+
+Set or rotate the endpoint without printing it: `printf 'RPC_URL=%s\n' "$(cat apps/server/.chainstack)" | fly secrets import -a assayscore-api`.
+
 To move the database between hosts, copy it consistently and swap it in while the old file is out of the way:
 
 ```sh

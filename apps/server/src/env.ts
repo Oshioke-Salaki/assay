@@ -48,8 +48,8 @@ const schema = z.object({
   REGISTRY_ADDRESS: optional(address),
 
   /**
-   * Pay for Chainstack's Celo RPC through the buy gateway (x402, $0.01 per batch of up to
-   * 2000 calls) for the enrichment reads that the free public RPC throttles. Unset: forno.
+   * The agent wallet's key: pays for X searches through the buy gateway over x402 and sends
+   * Assay's own onchain transactions. Unset: nothing is bought.
    */
   BUY_PAYER_KEY: optional(privateKey),
   BUY_DAILY_CAP_USD: z.coerce.number().min(0).max(100).default(1),
