@@ -75,11 +75,27 @@ export interface AddressReport {
   x?: XMentions | null;
 }
 
+export interface CheckOptions {
+  /**
+   * Buy an X search for the address now ($0.01 instead of $0.002): every post naming it, with
+   * warnings counted, fresh or at most fifteen minutes old. If Assay cannot buy the search it
+   * answers 502/503 and the x402 payment is not settled.
+   */
+  freshX?: boolean;
+}
+
 export interface PaidCheck extends CheckResult {
   asOf: number;
   attestation: Attestation | null;
-  /** What X says, in brief; a paid check on an address not yet searched queues one. */
-  x?: Pick<XMentions, "checkedAt" | "mentions" | "warnings" | "weakWarnings" | "searchUrl"> | null;
+  /**
+   * What X says, in brief; a paid check on an address not yet searched queues one. With
+   * `freshX`, the full picture with its posts, `fresh: true`, and `reused` when a search from
+   * the last fifteen minutes served the request.
+   */
+  x?:
+    | (Pick<XMentions, "checkedAt" | "mentions" | "warnings" | "weakWarnings" | "searchUrl"> &
+        Partial<XMentions> & { fresh?: boolean; reused?: boolean })
+    | null;
 }
 
 export interface Attestation {
@@ -129,10 +145,10 @@ export function createAssay(opts: AssayOptions = {}) {
       const qs = p.toString();
       return call<{ total: number; rows: unknown[] }>(plain, `/v1/agents${qs ? `?${qs}` : ""}`);
     },
-    /** Paid ($0.002): verdict plus a signed score. Needs `payingFetch`. */
-    check: (a: string) => {
+    /** Paid ($0.002, or $0.01 with `freshX`): verdict plus a signed score. Needs `payingFetch`. */
+    check: (a: string, options: CheckOptions = {}) => {
       if (!opts.payingFetch) throw new AssayError(0, "no_paying_fetch", "check() needs an x402 payingFetch");
-      return call<PaidCheck>(opts.payingFetch, `/v1/check/${requireAddress(a)}`);
+      return call<PaidCheck>(opts.payingFetch, `/v1/check/${requireAddress(a)}${options.freshX ? "/x" : ""}`);
     },
     /** Paid ($0.01): full report plus a signed score that AssayRegistry verifies. Needs `payingFetch`. */
     attest: (a: string) => {

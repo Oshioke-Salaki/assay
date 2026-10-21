@@ -299,10 +299,16 @@ function payOut(address seller) external {
         <Panel title="Pricing and limits" id="pricing">
           <p>
             Reports in the browser and the free endpoints cost nothing, within 60 calls a minute. Paid
-            endpoints are $0.002 per check and $0.01 per full report with attestation, paid over x402 through
-            Celo&rsquo;s facilitator in USD₮ by default, or USDC, USA₮, or Ripio&rsquo;s wARS, wBRL and wCOP
-            at the day&rsquo;s exchange rate. Nobody needs CELO for gas, wFIAT included. The seller pays the
-            facilitator&rsquo;s fee; buyers pay only the price.
+            endpoints are $0.002 per check, $0.01 per check with an X search bought now for you (
+            <code>/v1/check/:address/x</code>), and $0.01 per full report with attestation, paid over x402
+            through Celo&rsquo;s facilitator in USD₮ by default, or USDC, USA₮, or Ripio&rsquo;s wARS, wBRL
+            and wCOP at the day&rsquo;s exchange rate. Nobody needs CELO for gas, wFIAT included. The seller
+            pays the facilitator&rsquo;s fee; buyers pay only the price.
+          </p>
+          <p>
+            For a payment under a cent, the free report is the right tool: the paid check exists for the
+            signature a contract can verify and for evidence fetched on demand. If a paid search cannot be
+            bought or does not answer, the API answers 502 or 503 and the x402 payment is not settled.
           </p>
         </Panel>
 

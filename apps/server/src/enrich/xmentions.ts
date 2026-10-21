@@ -17,6 +17,10 @@ const DAY = 86_400;
 /** Posts change slowly for most addresses; a week keeps the picture fresh at a known cost. */
 export const X_REFRESH = 7 * DAY;
 const ERROR_RETRY = DAY;
+/** A search this recent is what a buyer paying for a fresh one gets, instead of a second search. */
+export const FRESH_ENOUGH = 15 * 60;
+/** A buyer is waiting on an on-demand search, so it gets less time than a background one. */
+const ONDEMAND_TIMEOUT_MS = 45_000;
 /** Accounts younger than this when they posted, or with fewer followers, are weak evidence. */
 const NEW_ACCOUNT = 30 * DAY;
 const FEW_FOLLOWERS = 25;
@@ -262,6 +266,11 @@ export class PaymentRefused extends Error {
 export interface XMentionsOptions {
   /** Paying fetch for the buy gateway's X search. */
   pay: typeof fetch;
+  /**
+   * Paying fetch for searches a buyer paid for through /v1/check/:address/x, under its own daily
+   * cap. Absent: that paid tier is not offered.
+   */
+  payOnDemand?: typeof fetch;
   searchUrl?: string;
   /** Only sellers that took at least this much are worth a paid search. */
   minGrossUsd?: number;
@@ -276,6 +285,8 @@ export interface XMentionsOptions {
  */
 export class XMentionsWatcher {
   private readonly searchUrl: string;
+  /** On-demand searches under way, so two buyers asking at once share one paid search. */
+  private readonly inflight = new Map<Address, Promise<XMentions>>();
 
   constructor(
     private readonly db: DB,
@@ -321,17 +332,53 @@ export class XMentionsWatcher {
     return readXMentions(this.db, address);
   }
 
+  /** Whether searches can be bought on demand for a paying buyer. */
+  get onDemand(): boolean {
+    return this.opts.payOnDemand !== undefined;
+  }
+
+  /**
+   * The X picture for a buyer who paid for a fresh one: a search from the last FRESH_ENOUGH
+   * seconds is fresh enough and is reused; otherwise one search is bought now. Two buyers asking
+   * about the same address at once share a single search. Throws BudgetExceeded or PaymentRefused
+   * when the search cannot be bought, so the caller can refuse the sale instead of delivering
+   * nothing for the money.
+   */
+  async fresh(
+    address: Address,
+    opts: { maxAgeSec?: number; timeoutMs?: number; now?: number } = {},
+  ): Promise<{ x: XMentions; reused: boolean }> {
+    const a = address.toLowerCase() as Address;
+    const now = opts.now ?? nowSec();
+    const have = readXMentions(this.db, a);
+    if (have && have.status === "ok" && now - have.checkedAt <= (opts.maxAgeSec ?? FRESH_ENOUGH))
+      return { x: have, reused: true };
+    const pay = this.opts.payOnDemand;
+    if (!pay) throw new Error("on-demand X search is not configured");
+    const running = this.inflight.get(a);
+    if (running) return { x: await running, reused: true };
+    const search = this.check(a, now, { pay, timeoutMs: opts.timeoutMs ?? ONDEMAND_TIMEOUT_MS }).finally(() =>
+      this.inflight.delete(a),
+    );
+    this.inflight.set(a, search);
+    return { x: await search, reused: false };
+  }
+
   /** One paid search for one address, stored whatever the outcome. */
-  async check(address: Address, now = nowSec()): Promise<XMentions> {
+  async check(
+    address: Address,
+    now = nowSec(),
+    opts: { pay?: typeof fetch; timeoutMs?: number } = {},
+  ): Promise<XMentions> {
     const a = address.toLowerCase() as Address;
     let result: XMentions;
     try {
-      const res = await this.opts.pay(this.searchUrl, {
+      const res = await (opts.pay ?? this.opts.pay)(this.searchUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         // Quoted, so X matches the whole address and not its pieces.
         body: JSON.stringify({ query: `"${a}"`, type: "top" }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
       });
       // Still 402 after paying means the payment itself was refused (an empty wallet, an expired
       // authorisation). That says nothing about the address, so nothing is stored for it.

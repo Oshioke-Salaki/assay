@@ -11,6 +11,7 @@ import type { Env } from "../env.js";
 /** USD prices in micro-dollars: raw units for the 6-decimal dollar tokens, converted for wFIAT. */
 export const PRICES = {
   check: 2_000n, // $0.002
+  checkX: 10_000n, // $0.01: a check plus an X search run now, bought from buy for this buyer
   attest: 10_000n, // $0.01
 } as const;
 
@@ -35,7 +36,7 @@ const PAY_TOKENS = PAY_ORDER.map((s) => TOKENS.find((t) => t.symbol === s)).filt
   (t): t is TokenInfo => t !== undefined,
 );
 
-export const PAID_ROUTES = ["/v1/check/:address", "/v1/attest/:address"] as const;
+export const PAID_ROUTES = ["/v1/check/:address", "/v1/check/:address/x", "/v1/attest/:address"] as const;
 
 /**
  * A dollar price in a wFIAT token's raw units, rounded up to two significant figures of the fiat
@@ -90,8 +91,33 @@ const addressParam = {
   },
 };
 
-export function routesConfig(payTo: `0x${string}`, fx?: FxRates) {
+export function routesConfig(payTo: `0x${string}`, fx?: FxRates, opts: { xOnDemand?: boolean } = {}) {
+  const checkX = opts.xOnDemand
+    ? {
+        "GET /v1/check/:address/x": {
+          accepts: accepts(payTo, PRICES.checkX, fx),
+          description:
+            "Assay pre-payment check plus a fresh X search for the address, run now through the buy gateway: the check's verdict and signed score, and every post naming the address with warnings counted.",
+          mimeType: "application/json",
+          extensions: {
+            ...declareEip2612GasSponsoringExtension(),
+            ...declareDiscoveryExtension({
+              ...addressParam,
+              output: {
+                example: {
+                  address: "0x0d74d5cefd2e7f24e623330ebe3d8d4cb45ffb48",
+                  verdict: "pass",
+                  rating: "A",
+                  x: { status: "ok", mentions: 2, warnings: 0, fresh: true },
+                },
+              },
+            }),
+          },
+        },
+      }
+    : {};
   return {
+    ...checkX,
     "GET /v1/check/:address": {
       accepts: accepts(payTo, PRICES.check, fx),
       description:
@@ -133,7 +159,7 @@ export function routesConfig(payTo: `0x${string}`, fx?: FxRates) {
  */
 export function paidMiddleware(
   env: Env,
-  opts: { syncOnStart?: boolean; fx?: FxRates } = {},
+  opts: { syncOnStart?: boolean; fx?: FxRates; xOnDemand?: boolean } = {},
 ): MiddlewareHandler {
   if (!env.X402_API_KEY || !env.PAY_TO) {
     return async (c, next) => {
@@ -161,7 +187,7 @@ export function paidMiddleware(
     .register(CAIP2_CELO as `${string}:${string}`, new ExactEvmScheme())
     .registerExtension(bazaarResourceServerExtension);
   return paymentMiddleware(
-    routesConfig(env.PAY_TO, opts.fx) as unknown as RoutesConfig,
+    routesConfig(env.PAY_TO, opts.fx, { xOnDemand: opts.xOnDemand }) as unknown as RoutesConfig,
     server,
     undefined,
     undefined,

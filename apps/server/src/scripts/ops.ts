@@ -33,6 +33,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
 import { loadEnv } from "../env.js";
+import { FUNDING_NOTE, fundingRefusal, hasPaid } from "../lib/funding-guard.js";
 import { createRuntime } from "../runtime.js";
 
 try {
@@ -228,11 +229,34 @@ const SENDABLE: Record<string, { address: `0x${string}`; decimals: number } | nu
   usdt: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 },
 };
 
+/**
+ * Assay never funds a wallet that pays it: that wallet's payments would become seller-funded and
+ * stop counting, by Assay's rules and the hackathon's. Checked against the live API before every
+ * transfer, and fails closed when the API cannot be reached.
+ */
+async function refuseToFundACustomer(to: string) {
+  const payTo = process.env.PAY_TO?.trim();
+  if (!payTo) throw new Error("Set PAY_TO so `send` can refuse to fund a wallet that pays Assay");
+  const api = (process.env.PUBLIC_URL ?? "https://api.assayscore.xyz").replace(/\/+$/, "");
+  let counterparties: { payee: string }[];
+  try {
+    const res = await fetch(`${api}/v1/address/${to}`, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) throw new Error(`API answered ${res.status}`);
+    const body = (await res.json()) as { assessment: { buyer: { counterparties: { payee: string }[] } } };
+    counterparties = body.assessment.buyer.counterparties;
+  } catch (err) {
+    throw new Error(`Not sending: could not check ${to} against ${api} (${String(err)}).`);
+  }
+  if (hasPaid(counterparties, payTo)) throw new Error(fundingRefusal(to));
+  console.error(FUNDING_NOTE);
+}
+
 /** Tagged transfer from the agent wallet: ops send <to> <celo|usdc|usdt> <amount> */
 async function send(to: string | undefined, asset: string | undefined, amount: string | undefined) {
   if (!to || !isAddress(to) || !asset || !(asset in SENDABLE) || !amount || !/^\d+(\.\d+)?$/.test(amount)) {
     throw new Error("Usage: ops send 0xTo celo|usdc|usdt 0.05");
   }
+  await refuseToFundACustomer(to);
   const w = wallet();
   const token = SENDABLE[asset];
   const hash = token

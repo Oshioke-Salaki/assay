@@ -23,12 +23,20 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
       title: "Check an x402 seller before paying",
       description:
         "Returns pass, caution or block for a Celo address, with its Assay rating, organic revenue share and reasons, plus what X says about the address (posts naming it, and how many use words like scam or hack). Call this before paying an unfamiliar x402 seller.",
-      inputSchema: { address },
+      inputSchema: {
+        address,
+        fresh_x: z
+          .boolean()
+          .optional()
+          .describe(
+            "Buy a fresh X search for the address with the check ($0.01 instead of $0.002). Only with a paying client; ignored on the free API.",
+          ),
+      },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async ({ address: a }) => {
+    async ({ address: a, fresh_x }) => {
       try {
-        if (opts.paid) return ok(await assay.check(a));
+        if (opts.paid) return ok(await assay.check(a, { freshX: fresh_x }));
         const report = await assay.address(a);
         const x = report.x;
         return ok({

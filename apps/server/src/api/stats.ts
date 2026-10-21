@@ -1,4 +1,4 @@
-import { type Address, dayOf, TOKENS, tokenByAddress } from "assayscore-core";
+import { type Address, type Assessment, dayOf, TOKENS, tokenByAddress, verdictFor } from "assayscore-core";
 import { type PublicClient, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { DB } from "../db.js";
@@ -107,6 +107,25 @@ export function publicStats(db: DB, env: Env, usage: Usage | null, status: Index
   };
 }
 
+/**
+ * Assay's own address, rated by Assay's rules. Payments from wallets Assay funded are struck out
+ * like anyone else's, so this is the honest count of its independent customers.
+ */
+export function selfView(a: Assessment) {
+  const check = verdictFor(a);
+  return {
+    address: a.address,
+    rating: a.rating,
+    verdict: check.verdict,
+    reasons: check.reasons,
+    grossUsd: a.seller.grossUsd,
+    organicUsd: a.seller.organicUsd,
+    fundedUsd: a.seller.fundedUsd,
+    payers: a.seller.payers,
+    organicPayers: a.seller.organicPayers,
+  };
+}
+
 function daySeries<T extends { day: number }>(rows: T[], from: number, to: number) {
   const out = [];
   for (let d = from; d <= to; d++) {
@@ -189,7 +208,10 @@ export async function adminStats(db: DB, env: Env, rpc: PublicClient, now = Date
   );
 
   const dayStart = Math.floor(now / 86_400_000) * 86_400;
-  const caps: Record<string, number> = { "buy-x-search": env.X_MENTIONS_DAILY_CAP_USD };
+  const caps: Record<string, number> = {
+    "buy-x-search": env.X_MENTIONS_DAILY_CAP_USD,
+    "buy-x-search-ondemand": env.X_ONDEMAND_DAILY_CAP_USD,
+  };
   const today = db
     .prepare(
       "SELECT service, COUNT(*) AS calls, COALESCE(SUM(usd), 0) AS usd, SUM(tx_hash IS NULL) AS failed FROM paid_calls WHERE ts >= ? GROUP BY service",

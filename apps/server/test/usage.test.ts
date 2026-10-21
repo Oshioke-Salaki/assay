@@ -173,6 +173,9 @@ function app(overrides: Record<string, string> = {}, rpc: Partial<PublicClient> 
 const get = (a: ReturnType<typeof app>["app"], path: string, headers: Record<string, string> = {}) =>
   a.request(path, { headers: { "x-forwarded-for": "198.51.100.4", ...headers } });
 
+const self_ = (s: unknown) =>
+  (s as { self: { address: string; payers: number; grossUsd: number; verdict: string } }).self;
+
 describe("GET /v1/stats", () => {
   it("shows usage, revenue at the PayTo address, spend and data freshness", async () => {
     const { app: a } = app();
@@ -201,6 +204,13 @@ describe("GET /v1/stats", () => {
     expect(s.revenue.recent[0]?.tx).toBe(`0x${"2".padStart(64, "0")}`);
     expect(s.spend).toMatchObject({ services: [{ service: "buy-x-search", calls: 1 }] });
     expect(s.data.lagBlocks).toBe(20);
+    // Assay rated by its own rules: the PayTo address has two payers in this fixture.
+    expect(self_(s)).toMatchObject({
+      address: SHOP,
+      payers: expect.any(Number),
+      grossUsd: expect.any(Number),
+    });
+    expect(["pass", "caution", "block"]).toContain(self_(s).verdict);
   });
 
   it("counts the website's page renders as use but not as callers", async () => {
@@ -258,6 +268,7 @@ describe("GET /v1/admin", () => {
     expect(s.wallets[0]?.tokens.find((t) => t.symbol === "USDC")?.balance).toBe(1.5);
     expect(s.budgets).toEqual([
       { service: "buy-x-search", capUsd: 0.5, spentUsd: 0.005, calls: 1, failed: 0 },
+      { service: "buy-x-search-ondemand", capUsd: 2, spentUsd: 0, calls: 0, failed: 0 },
     ]);
     expect(s.database.settlements).toBe(3);
     expect(s.process.rssMb).toBeGreaterThan(0);

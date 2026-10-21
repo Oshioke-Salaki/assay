@@ -16,7 +16,7 @@ import { REGISTRY_CURSOR, RegistryIndexer } from "./indexer/registry.js";
 import { FailoverSource, type RpcReader, RpcSource } from "./indexer/rpcsource.js";
 import { SETTLEMENT_CURSOR, SettlementIndexer } from "./indexer/settlements.js";
 import { SqdClient, sleep } from "./indexer/sqd.js";
-import { createPayingFetch, type ReconcileReader, reconcilePaidCalls } from "./lib/buy.js";
+import { createPayingFetch, type ReconcileReader, reconcilePaidCalls, serialLock } from "./lib/buy.js";
 import { log } from "./lib/log.js";
 import { Usage } from "./usage.js";
 
@@ -33,6 +33,7 @@ export interface Runtime {
   /** Run indexer and enrichment loops until the signal aborts. */
   runWorkers: (signal: AbortSignal) => Promise<void>;
   usage: Usage;
+  xmentions: XMentionsWatcher | null;
   close: () => void;
 }
 
@@ -115,8 +116,10 @@ export function createRuntime(env: Env): Runtime {
   };
 
   // What X says about each seller, bought one search at a time through the buy gateway.
+  // Both paying fetches draw on the same wallet, so they take turns through one lock.
+  const payLock = serialLock();
   const xmentions =
-    env.BUY_PAYER_KEY && env.X_MENTIONS_DAILY_CAP_USD > 0
+    env.BUY_PAYER_KEY && (env.X_MENTIONS_DAILY_CAP_USD > 0 || env.X_ONDEMAND_DAILY_CAP_USD > 0)
       ? new XMentionsWatcher(db, {
           pay: createPayingFetch({
             db,
@@ -124,7 +127,19 @@ export function createRuntime(env: Env): Runtime {
             service: "buy-x-search",
             pricePerCallUsd: 0.005,
             dailyCapUsd: env.X_MENTIONS_DAILY_CAP_USD,
+            lock: payLock,
           }),
+          payOnDemand:
+            env.X_ONDEMAND_DAILY_CAP_USD > 0
+              ? createPayingFetch({
+                  db,
+                  privateKey: env.BUY_PAYER_KEY,
+                  service: "buy-x-search-ondemand",
+                  pricePerCallUsd: 0.005,
+                  dailyCapUsd: env.X_ONDEMAND_DAILY_CAP_USD,
+                  lock: payLock,
+                })
+              : undefined,
           searchUrl: env.BUY_X_SEARCH_URL,
           minGrossUsd: env.X_MENTIONS_MIN_GROSS_USD,
           onChange: invalidate,
@@ -166,7 +181,9 @@ export function createRuntime(env: Env): Runtime {
       indexLoop(),
       enricher.run(signal),
       cards.run(signal),
-      xmentions?.run(signal).catch((err) => log.error("x mentions stopped", { error: String(err) })),
+      env.X_MENTIONS_DAILY_CAP_USD > 0
+        ? xmentions?.run(signal).catch((err) => log.error("x mentions stopped", { error: String(err) }))
+        : undefined,
       reconcileLoop(signal),
     ]);
   };
@@ -182,6 +199,7 @@ export function createRuntime(env: Env): Runtime {
     syncOnce,
     runWorkers,
     usage,
+    xmentions,
     close: () => {
       usage.flush();
       db.close();

@@ -226,6 +226,18 @@ export interface Stats {
     lastSettlementTs: number | null;
     fundingCoverage: number | null;
   };
+  /** Assay's own PayTo address, rated by Assay's rules. */
+  self: {
+    address: Address;
+    rating: Rating;
+    verdict: "pass" | "caution" | "block";
+    reasons: string[];
+    grossUsd: number;
+    organicUsd: number;
+    fundedUsd: number;
+    payers: number;
+    organicPayers: number;
+  } | null;
 }
 
 /** Operator view, from GET /v1/admin with the admin key. */

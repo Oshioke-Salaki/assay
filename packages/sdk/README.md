@@ -51,7 +51,13 @@ await assay.agents({ q: "weather" });
 ```ts
 const assay = createAssay({ payingFetch: wrapFetchWithPayment(fetch, client) });
 const { verdict, attestation } = await assay.check(seller);
+
+// $0.01: the same check plus an X search bought now for you. `x.posts` lists every post
+// naming the address; `x.reused` is true when a search from the last 15 minutes served it.
+const fresh = await assay.check(seller, { freshX: true });
 ```
+
+If Assay cannot buy the search (daily budget spent, gateway down), `check` throws an `AssayError` with status 502 or 503 and the x402 payment is not settled.
 
 Assay prices in USD₮ first, then USDC and USA₮, and also accepts Ripio's wARS, wBRL and wCOP at the day's exchange rate, gaslessly through Permit2. x402's default selector takes the server's first option whatever your wallet holds, so tell the client which token to pay in:
 

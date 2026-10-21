@@ -22,13 +22,22 @@ import type { Analysis } from "../analysis.js";
 import type { Attester } from "../attest.js";
 import type { DB } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
-import { readXMentions, wantXMentions, X_REFRESH, type XMentions, xReason } from "../enrich/xmentions.js";
+import {
+  PaymentRefused,
+  readXMentions,
+  wantXMentions,
+  X_REFRESH,
+  type XMentions,
+  type XMentionsWatcher,
+  xReason,
+} from "../enrich/xmentions.js";
 import type { Env } from "../env.js";
+import { BudgetExceeded } from "../lib/buy.js";
 import { log } from "../lib/log.js";
 import { proveSettlement } from "../proof.js";
 import { classify, type Usage } from "../usage.js";
 import { PRICES, paidMiddleware } from "./paid.js";
-import { adminStats, publicStats } from "./stats.js";
+import { adminStats, publicStats, selfView } from "./stats.js";
 
 export interface IndexStatus {
   settlementsBlock: number;
@@ -49,6 +58,8 @@ export interface AppDeps {
   syncFacilitatorOnStart?: boolean;
   /** Counts what the API is used for; absent in tests that do not care. */
   usage?: Usage | null;
+  /** What X says, with searches bought on demand for paying buyers when configured. */
+  xmentions?: XMentionsWatcher | null;
 }
 
 const LIST_LIMIT = 100;
@@ -107,7 +118,11 @@ export function createApp(deps: AppDeps): Hono {
   app.use("*", bodyLimit({ maxSize: 16 * 1024 }));
   app.use("/v1/check/*", validateAddressParam);
   app.use("/v1/attest/*", validateAddressParam);
-  app.use("*", paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true, fx: deps.fx }));
+  const xOnDemand = Boolean(deps.xmentions?.onDemand);
+  app.use(
+    "*",
+    paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true, fx: deps.fx, xOnDemand }),
+  );
 
   const free = rateLimit(env.FREE_RATE_PER_MIN, env.INTERNAL_API_KEY);
 
@@ -147,7 +162,11 @@ export function createApp(deps: AppDeps): Hono {
           "/v1/proof/:tx",
           "/v1/status",
         ],
-        paid: { "/v1/check/:address": usd(PRICES.check), "/v1/attest/:address": usd(PRICES.attest) },
+        paid: {
+          "/v1/check/:address": usd(PRICES.check),
+          ...(xOnDemand ? { "/v1/check/:address/x": usd(PRICES.checkX) } : {}),
+          "/v1/attest/:address": usd(PRICES.attest),
+        },
       },
     }),
   );
@@ -362,6 +381,18 @@ export function createApp(deps: AppDeps): Hono {
     });
   });
 
+  /**
+   * A check plus an X search bought now for this buyer ($0.01; the search costs Assay $0.005).
+   * A search from the last fifteen minutes is fresh enough and is reused. When the search cannot
+   * be bought or does not answer, the response is an error status, which cancels the x402
+   * settlement: nobody pays for evidence they did not get.
+   */
+  app.get("/v1/check/:address/x", async (c) => {
+    const out = await checkWithX(deps, normalizeAddress(c.req.param("address")));
+    if (out.retryAfter) c.header("retry-after", String(out.retryAfter));
+    return c.json(out.body, out.status);
+  });
+
   app.get("/v1/attest/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
     const a = analysis.assess(address);
@@ -384,7 +415,14 @@ export function createApp(deps: AppDeps): Hono {
   app.get("/v1/stats", free, (c) => {
     const now = Date.now();
     if (!statsCache || now - statsCache.at > 30_000)
-      statsCache = { at: now, body: publicStats(deps.db, env, deps.usage ?? null, deps.status(), now) };
+      statsCache = {
+        at: now,
+        body: {
+          ...publicStats(deps.db, env, deps.usage ?? null, deps.status(), now),
+          // Assay rated by its own rules: the honest count of its independent customers.
+          self: env.PAY_TO ? selfView(analysis.assess(env.PAY_TO.toLowerCase() as Address)) : null,
+        },
+      };
     c.header("cache-control", "public, max-age=30");
     return c.json(statsCache.body as Record<string, unknown>);
   });
@@ -437,7 +475,11 @@ export function createApp(deps: AppDeps): Hono {
       version: METHODOLOGY_VERSION,
       thinFile: THIN_FILE,
       ratingFloors: Object.fromEntries(RATING_FLOORS),
-      prices: { check: usd(PRICES.check), attest: usd(PRICES.attest) },
+      prices: {
+        check: usd(PRICES.check),
+        ...(xOnDemand ? { checkX: usd(PRICES.checkX) } : {}),
+        attest: usd(PRICES.attest),
+      },
     }),
   );
 
@@ -476,10 +518,76 @@ export function createApp(deps: AppDeps): Hono {
 }
 
 const validateAddressParam: MiddlewareHandler = async (c, next) => {
-  const last = c.req.path.split("/").pop() ?? "";
-  if (!isAddress(last)) return badAddress(c);
+  // /v1/check/:address and /v1/check/:address/x: the address is the third segment either way.
+  const subject = c.req.path.split("/")[3] ?? "";
+  if (!isAddress(subject)) return badAddress(c);
   await next();
 };
+
+/**
+ * The answer to a paid check with a fresh X search. Any status other than 200 cancels the x402
+ * settlement, so a buyer is never charged for a search that was not delivered.
+ */
+export async function checkWithX(
+  deps: Pick<AppDeps, "xmentions" | "analysis" | "attester" | "status">,
+  address: Address,
+): Promise<{ status: 200 | 502 | 503; body: Record<string, unknown>; retryAfter?: number }> {
+  const w = deps.xmentions;
+  if (!w?.onDemand)
+    return {
+      status: 503,
+      body: { error: "x_search_not_offered", message: "This Assay instance does not sell X searches." },
+    };
+  let got: { x: XMentions; reused: boolean };
+  try {
+    got = await w.fresh(address);
+  } catch (err) {
+    if (err instanceof BudgetExceeded)
+      return {
+        status: 503,
+        retryAfter: secondsToMidnight(),
+        body: {
+          error: "x_budget_spent",
+          message:
+            "Assay's daily budget for X searches is spent; nothing was charged. Try again after 00:00 UTC, or use /v1/check without the search.",
+        },
+      };
+    if (err instanceof PaymentRefused)
+      log.error("on-demand x search: payment refused; top up the agent wallet", { reason: err.message });
+    else log.warn("on-demand x search failed", { address, error: String(err) });
+    return {
+      status: 503,
+      body: {
+        error: "x_search_unavailable",
+        message: "The X search could not be bought right now. Nothing was charged.",
+      },
+    };
+  }
+  if (got.x.status !== "ok")
+    return {
+      status: 502,
+      body: {
+        error: "x_search_failed",
+        message: `The X search did not answer (${got.x.error ?? "unknown error"}). Nothing was charged.`,
+      },
+    };
+  const a = deps.analysis.assess(address);
+  const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
+  return {
+    status: 200,
+    body: {
+      ...withX(verdictFor(a), got.x),
+      x: { ...got.x, fresh: true, reused: got.reused },
+      asOf: deps.analysis.current().builtAt,
+      attestation,
+    },
+  };
+}
+
+function secondsToMidnight(now = Date.now()): number {
+  const day = 86_400;
+  return day - (Math.floor(now / 1000) % day);
+}
 
 function badAddress(c: Context) {
   return c.json({ error: "bad_address", message: "Expected a 0x-prefixed 20-byte address." }, 400);

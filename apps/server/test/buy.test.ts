@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BudgetExceeded, createPayingFetch, readSettlementTx, reconcilePaidCalls } from "../src/lib/buy.js";
+import {
+  BudgetExceeded,
+  createPayingFetch,
+  readSettlementTx,
+  reconcilePaidCalls,
+  serialLock,
+} from "../src/lib/buy.js";
 import { memoryDb } from "./helpers.js";
 
 const KEY = `0x${"33".repeat(32)}` as const;
@@ -339,5 +345,77 @@ describe("reconcilePaidCalls", () => {
     });
     await expect(pay("https://gateway.test/x")).rejects.toBeInstanceOf(BudgetExceeded);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("serialLock", () => {
+  it("lets two paying fetches from one wallet take turns instead of overlapping", async () => {
+    const db = memoryDb();
+    let inFlight = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const h = new Request(i, init).headers;
+      if (!h.has("x-payment")) return challengeV1("5000");
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 15));
+      inFlight--;
+      return settledV1();
+    });
+    const lock = serialLock();
+    const mk = (service: string) =>
+      createPayingFetch({
+        db,
+        privateKey: KEY,
+        service,
+        pricePerCallUsd: 0.005,
+        dailyCapUsd: 1,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        lock,
+      });
+    const a = mk("buy-x-search");
+    const b = mk("buy-x-search-ondemand");
+    await Promise.all([
+      a("https://gateway.test/x"),
+      b("https://gateway.test/x"),
+      a("https://gateway.test/x"),
+    ]);
+    expect(peak).toBe(1);
+    const rows = db
+      .prepare("SELECT service, COUNT(*) AS n FROM paid_calls GROUP BY service ORDER BY service")
+      .all();
+    expect(rows).toEqual([
+      { service: "buy-x-search", n: 2 },
+      { service: "buy-x-search-ondemand", n: 1 },
+    ]);
+  });
+
+  it("keeps each service's daily cap apart", async () => {
+    const db = memoryDb();
+    const fetchImpl = vi.fn(async (i: Parameters<typeof fetch>[0], init?: RequestInit) =>
+      new Request(i, init).headers.has("x-payment") ? settledV1() : challengeV1("5000"),
+    );
+    const lock = serialLock();
+    const tight = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "buy-x-search",
+      pricePerCallUsd: 0.005,
+      dailyCapUsd: 0.005,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      lock,
+    });
+    const roomy = createPayingFetch({
+      db,
+      privateKey: KEY,
+      service: "buy-x-search-ondemand",
+      pricePerCallUsd: 0.005,
+      dailyCapUsd: 1,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      lock,
+    });
+    await tight("https://gateway.test/x");
+    await expect(tight("https://gateway.test/x")).rejects.toBeInstanceOf(BudgetExceeded);
+    expect((await roomy("https://gateway.test/x")).status).toBe(200);
   });
 });

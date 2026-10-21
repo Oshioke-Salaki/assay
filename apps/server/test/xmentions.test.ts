@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
+  FRESH_ENOUGH,
   PaymentRefused,
   parseXDate,
   readSearch,
@@ -293,6 +294,91 @@ describe("XMentionsWatcher", () => {
     });
     await expect(w.check(`0x${"a".repeat(40)}`)).rejects.toBeInstanceOf(BudgetExceeded);
     expect(readXMentions(db, `0x${"a".repeat(40)}`)).toBeNull();
+  });
+});
+
+describe("on demand", () => {
+  const a = `0x${"a".repeat(40)}` as const;
+  const paid = (timeline: unknown[] = []) =>
+    vi.fn(async () => new Response(JSON.stringify(answer(timeline)))) as unknown as typeof fetch;
+
+  it("is not offered without its own paying fetch", async () => {
+    const w = new XMentionsWatcher(memoryDb(), { pay: okPay(answer([])) });
+    expect(w.onDemand).toBe(false);
+    await expect(w.fresh(a)).rejects.toThrow(/not configured/);
+  });
+
+  it("buys one search with the on-demand fetch, never the background one", async () => {
+    const db = memoryDb();
+    const background = okPay(answer([]));
+    const onDemand = paid([post({ text: `x402 seller ${a}` })]);
+    const w = new XMentionsWatcher(db, { pay: background, payOnDemand: onDemand });
+    expect(w.onDemand).toBe(true);
+    const r = await w.fresh(a, { now: 5_000 });
+    expect(r).toMatchObject({ reused: false, x: { status: "ok", mentions: 1, checkedAt: 5_000 } });
+    expect(onDemand).toHaveBeenCalledTimes(1);
+    expect(background).not.toHaveBeenCalled();
+    expect(readXMentions(db, a)?.mentions).toBe(1);
+  });
+
+  it("reuses a search from the last fifteen minutes and buys again after that", async () => {
+    const db = memoryDb();
+    const onDemand = paid();
+    const w = new XMentionsWatcher(db, { pay: okPay(answer([])), payOnDemand: onDemand });
+    await w.fresh(a, { now: 10_000 });
+    expect(await w.fresh(a, { now: 10_000 + FRESH_ENOUGH })).toMatchObject({ reused: true });
+    expect(onDemand).toHaveBeenCalledTimes(1);
+    expect(await w.fresh(a, { now: 10_000 + FRESH_ENOUGH + 1 })).toMatchObject({ reused: false });
+    expect(onDemand).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse a failed search: the buyer paid for an answer", async () => {
+    const db = memoryDb();
+    await new XMentionsWatcher(db, {
+      pay: vi.fn(async () => new Response("{}", { status: 502 })) as unknown as typeof fetch,
+    }).check(a, 10_000);
+    expect(readXMentions(db, a)?.status).toBe("error");
+    const onDemand = paid();
+    const w = new XMentionsWatcher(db, { pay: okPay(answer([])), payOnDemand: onDemand });
+    expect(await w.fresh(a, { now: 10_010 })).toMatchObject({ reused: false, x: { status: "ok" } });
+    expect(onDemand).toHaveBeenCalledTimes(1);
+  });
+
+  it("two buyers asking at once share one paid search", async () => {
+    const db = memoryDb();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const onDemand = vi.fn(async () => {
+      await gate;
+      return new Response(JSON.stringify(answer([])));
+    }) as unknown as typeof fetch;
+    const w = new XMentionsWatcher(db, { pay: okPay(answer([])), payOnDemand: onDemand });
+    const first = w.fresh(a, { now: 1 });
+    const second = w.fresh(a, { now: 1 });
+    release();
+    const [r1, r2] = await Promise.all([first, second]);
+    expect(r1.reused).toBe(false);
+    expect(r2.reused).toBe(true);
+    expect(onDemand).toHaveBeenCalledTimes(1);
+    // The next request after both settle is a new search again (nothing left in flight).
+    expect(await w.fresh(a, { now: 1 + FRESH_ENOUGH + 1 })).toMatchObject({ reused: false });
+  });
+
+  it("lets budget and payment failures through, so the sale can be refused", async () => {
+    const budget = new XMentionsWatcher(memoryDb(), {
+      pay: okPay(answer([])),
+      payOnDemand: vi.fn(async () => {
+        throw new BudgetExceeded(2, 2);
+      }) as unknown as typeof fetch,
+    });
+    await expect(budget.fresh(a)).rejects.toBeInstanceOf(BudgetExceeded);
+    const refused = new XMentionsWatcher(memoryDb(), {
+      pay: okPay(answer([])),
+      payOnDemand: vi.fn(async () => new Response("{}", { status: 402 })) as unknown as typeof fetch,
+    });
+    await expect(refused.fresh(a)).rejects.toBeInstanceOf(PaymentRefused);
   });
 });
 

@@ -68,6 +68,8 @@ Onchain data shows how a seller is paid. It cannot show whether people are warni
 
 Each address is searched again weekly. A failed search is retried after a day.
 
+**Searches a buyer pays for.** `GET /v1/check/:address/x` ($0.01) buys a search now for the buyer who asked, under its own daily budget, so a paying customer never waits for the background queue. A search from the last fifteen minutes is fresh enough and is reused; two buyers asking at once share one search. If the search cannot be bought (budget spent, empty wallet) or the gateway does not answer, the request fails and the payment is not settled: nobody pays for evidence they did not get.
+
 **How posts are read.**
 
 - Only posts that contain the address, in their text or in a link, count as mentions.

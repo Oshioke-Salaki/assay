@@ -107,6 +107,10 @@ The Railway service still runs the version from before the outage. Before switch
 
 A failure opens one issue labelled `uptime`; GitHub emails everyone watching the repo. Further failures comment on that issue, and the first green run closes it. Run the same check by hand with `node scripts/uptime.mjs`, or from the Actions tab with "Run workflow". To point it at another deployment, set the repository variables `ASSAY_API_URL` and `ASSAY_WEB_URL`; `MAX_LAG_BLOCKS` changes the lag limit when you run it by hand.
 
+### X searches
+
+`X_MENTIONS_DAILY_CAP_USD` (default 0.5) bounds the background searches; `X_ONDEMAND_DAILY_CAP_USD` (default 2) bounds searches bought by paid checks, which buyers pay for. Both draw on the agent wallet's USDC through one lock, so they never overlap. Set the on-demand cap to 0 to stop offering `/v1/check/:address/x`.
+
 ### Operator view
 
 Set `ADMIN_KEY` (at least 8 characters; longer is better, `openssl rand -hex 32` gives one) to switch on `GET /v1/admin` and the page at `/admin`. Without it the route answers 404. To change the key, set a new one with `fly secrets set ADMIN_KEY=...`; the old one stops working when the machine restarts. Public usage and revenue numbers are at `/stats` and need no key.

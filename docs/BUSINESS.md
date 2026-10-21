@@ -20,6 +20,8 @@ People reading reports in the browser pay nothing. That is the top of the funnel
 
 ## Unit economics
 
+Prices: $0.002 per check, $0.01 per check with an X search bought on demand (Assay pays buy $0.005 of it), $0.01 per signed attestation. The free report serves payments under a cent; the paid tiers sell a signature a contract can verify and evidence fetched for the buyer.
+
 A check costs Assay a database read and one signature. The Celo facilitator charges sellers gas at cost plus 0.3% after 20 free settlements, so a $0.002 check keeps most of its price. Assay's own costs are hosting (one small server) and the paid data it buys: X searches through buy at $0.005 each, capped at $0.50 a day, and a Chainstack Celo RPC endpoint (Growth plan, from the hackathon builder pack).
 
 ## Scaling

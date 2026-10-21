@@ -56,6 +56,11 @@ const schema = z.object({
   /** X searches through buy: what the public says about each seller. Off when 0. */
   X_MENTIONS_DAILY_CAP_USD: z.coerce.number().min(0).max(100).default(0.5),
   X_MENTIONS_MIN_GROSS_USD: z.coerce.number().min(0).default(1),
+  /**
+   * Searches bought on demand by a paid check ($0.01 to the buyer, $0.005 to buy): paid for by the
+   * buyer, so the cap only bounds what one bad day can cost. 0 switches the paid tier off.
+   */
+  X_ONDEMAND_DAILY_CAP_USD: z.coerce.number().min(0).max(100).default(2),
   BUY_X_SEARCH_URL: z.string().url().default("https://gateway.usebuy.ai/v1/social/x/posts/search"),
   /** Where the buy gateway is paid; the ledger is reconciled against transfers to it. */
   BUY_GATEWAY_PAY_TO: z

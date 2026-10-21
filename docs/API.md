@@ -6,7 +6,8 @@ Base URL: `https://api.assayscore.xyz` (or wherever you deploy your own server).
 
 | Route | Price | Returns |
 | --- | --- | --- |
-| `GET /v1/check/:address` | $0.002 | `verdict` (pass · caution · block), `rating`, `score`, `organicShare`, `reasons`, `attestation` |
+| `GET /v1/check/:address` | $0.002 | `verdict` (pass · caution · block), `rating`, `score`, `organicShare`, `reasons`, `attestation`, `x` in brief |
+| `GET /v1/check/:address/x` | $0.01 | the same check plus an X search bought now for this buyer through the buy gateway: `x` in full (every post naming the address, warnings counted) with `fresh: true` and `reused` (a search from the last 15 minutes served it). If the search cannot be bought or does not answer, 502 or 503 with `retry-after` when the day's budget is spent, and the x402 payment is **not** settled |
 | `GET /v1/attest/:address` | $0.01 | the full assessment (payer lines up to 500), `check`, linked `agents`, `attestation` |
 
 An unpaid request answers 402 with a `PAYMENT-REQUIRED` header listing six options in this order: USD₮ (the default), USDC, USA₮, then Ripio's wARS, wBRL and wCOP. The dollars are paid with EIP-3009. The wFIAT tokens are paid through the x402 Permit2 proxy at the day's exchange rate, rounded up to two significant figures (for $0.002: 3.1 wARS, 0.011 wBRL, 6.4 wCOP at mid-October rates). The 402 declares `eip2612GasSponsoring`, so a payer without a Permit2 approval signs an EIP-2612 permit and the facilitator submits it: no payer ever needs CELO for gas.
@@ -20,6 +21,8 @@ client.setSpendControls({
 ```
 
 Token addresses: wARS `0x0dc4f92879b7670e5f4e4e6e3c801d229129d90d`, wBRL `0xd76f5faf6888e24d9f04bf92a0c8b921fe4390e0`, wCOP `0x8a1d45e102e886510e891d2ec656a708991e2d76`.
+
+The on-demand search is offered only when the server can buy searches (`BUY_PAYER_KEY` and `X_ONDEMAND_DAILY_CAP_USD` set); `GET /` lists it under `endpoints.paid` when it is. For a payment under a cent, the free report is the right tool: the paid check exists for the signature a contract can verify and for evidence fetched on demand.
 
 Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`/`PAY_TO` configured the paid routes answer 503.
 

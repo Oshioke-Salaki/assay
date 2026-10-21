@@ -1,5 +1,5 @@
 import type { Flag } from "assayscore-core";
-import { verdictFor } from "assayscore-core";
+import { THIN_FILE, verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -94,6 +94,11 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
           </p>
         </div>
         <div className={styles.actions}>
+          {a.rating !== "NR" ? (
+            <a className="btn btn--ink" href="#publish">
+              Publish hallmark onchain
+            </a>
+          ) : null}
           <a className="btn btn--quiet" href={`${API_PUBLIC}/v1/address/${address}`}>
             JSON
           </a>
@@ -126,6 +131,13 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
           </div>
         </div>
         <HallmarkKey />
+        {a.rating === "NR" && a.role !== "none" ? (
+          <p className={styles.muted} style={{ maxWidth: "72ch" }}>
+            Not rated means a thin file, not a bad one: fewer than {THIN_FILE.minSettlements} settlements or{" "}
+            {THIN_FILE.minPayers} payers. The check says caution, never block, until there is history to
+            judge.
+          </p>
+        ) : null}
         {a.role === "none" ? (
           <p className={styles.empty}>
             This address has never sent or received an x402 payment on Celo, so there is nothing to assay yet.

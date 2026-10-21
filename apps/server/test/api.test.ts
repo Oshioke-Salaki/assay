@@ -2,12 +2,13 @@ import { dayOf, tokenByAddress } from "assayscore-core";
 import type { PublicClient } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Analysis } from "../src/analysis.js";
-import { createApp } from "../src/api/app.js";
+import { checkWithX, createApp } from "../src/api/app.js";
 import { fiatUnits } from "../src/api/paid.js";
 import { Attester } from "../src/attest.js";
 import type { DB } from "../src/db.js";
-import { XMentionsWatcher } from "../src/enrich/xmentions.js";
+import { PaymentRefused, type XMentions, XMentionsWatcher } from "../src/enrich/xmentions.js";
 import { SettlementIndexer } from "../src/indexer/settlements.js";
+import { BudgetExceeded } from "../src/lib/buy.js";
 import { FIXTURE_BLOCKS, fakeSqd, fixedFx, memoryDb, testEnv } from "./helpers.js";
 
 const RING = [1, 2, 3].map((i) => `0x${String(i).repeat(40)}`);
@@ -387,7 +388,9 @@ describe("paid API", () => {
   it("answers 503 when selling is not configured, and 400 before that for bad addresses", async () => {
     const { app } = build();
     expect((await get(app, `/v1/check/${SHOP}`)).status).toBe(503);
+    expect((await get(app, `/v1/check/${SHOP}/x`)).status).toBe(503);
     expect((await get(app, "/v1/check/not-an-address")).status).toBe(400);
+    expect((await get(app, "/v1/check/not-an-address/x")).status).toBe(400);
     expect((await get(app, "/v1/attest/0x00")).status).toBe(400);
   });
 
@@ -463,5 +466,140 @@ describe("Analysis rebuilds", () => {
     );
     const analysis = new Analysis(db, 0);
     expect(analysis.current().summary.settlements).toBe(FIXTURE_BLOCKS.length);
+  });
+});
+
+describe("paid check with a fresh X search", () => {
+  const supported = {
+    kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:42220" }],
+    extensions: [],
+    signers: { "eip155:42220": ["0x0d74D5Cefd2e7F24E623330ebE3d8D4cB45fFB48"] },
+  };
+  const stubFacilitator = () =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.endsWith("/supported")) return new Response(JSON.stringify(supported), { status: 200 });
+        return new Response("{}", { status: 404 });
+      }),
+    );
+  const xOk = (over: Partial<XMentions> = {}): XMentions => ({
+    address: SHOP as `0x${string}`,
+    checkedAt: 1_000,
+    status: "ok",
+    mentions: 1,
+    warnings: 0,
+    weakWarnings: 0,
+    posts: [],
+    searchUrl: "https://x.com/search?q=x",
+    tx: `0x${"ab".repeat(32)}`,
+    ...over,
+  });
+  const watcher = (fresh: () => Promise<{ x: XMentions; reused: boolean }>) =>
+    ({ onDemand: true, fresh }) as unknown as XMentionsWatcher;
+  function withWatcher(w: XMentionsWatcher | null, overrides: Record<string, string> = {}) {
+    const env = testEnv({ CORS_ORIGINS: "https://assay.example", FREE_RATE_PER_MIN: "1000", ...overrides });
+    const db = memoryDb();
+    seed(db);
+    const analysis = new Analysis(db, 0);
+    const deps = {
+      env,
+      db,
+      analysis,
+      fx: fixedFx(db),
+      rpc: {} as PublicClient,
+      attester: null,
+      status: () => ({
+        settlementsBlock: 100,
+        registryBlock: 100,
+        finalizedHead: 120,
+        lastSettlementTs: null,
+      }),
+      syncFacilitatorOnStart: true,
+      xmentions: w,
+    };
+    return { app: createApp(deps), deps };
+  }
+
+  it("is priced at $0.01 in every token, only when searches can be bought on demand", async () => {
+    stubFacilitator();
+    const paid = { X402_API_KEY: "test-key-123", PAY_TO: `0x${"a".repeat(40)}` };
+    const { app } = withWatcher(
+      watcher(async () => ({ x: xOk(), reused: false })),
+      paid,
+    );
+    const res = await get(app, `/v1/check/${SHOP}/x`);
+    expect(res.status).toBe(402);
+    const required = JSON.parse(
+      Buffer.from(res.headers.get("payment-required")!, "base64").toString("utf8"),
+    ) as { accepts: { asset: string; amount: string }[] };
+    expect(required.accepts).toHaveLength(6);
+    expect(required.accepts.slice(0, 3).map((a) => a.amount)).toEqual(["10000", "10000", "10000"]);
+    // The plain check still costs $0.002.
+    const plain = await get(app, `/v1/check/${SHOP}`);
+    const plainReq = JSON.parse(
+      Buffer.from(plain.headers.get("payment-required")!, "base64").toString("utf8"),
+    ) as { accepts: { amount: string }[] };
+    expect(plainReq.accepts[0]?.amount).toBe("2000");
+    expect(
+      ((await (await get(app, "/")).json()) as { endpoints: { paid: Record<string, string> } }).endpoints
+        .paid,
+    ).toHaveProperty("/v1/check/:address/x", "$0.010");
+
+    const { app: off } = withWatcher(null, paid);
+    const none = await get(off, `/v1/check/${SHOP}/x`);
+    expect(none.status).toBe(503);
+    expect(((await none.json()) as { error: string }).error).toBe("x_search_not_offered");
+    expect(
+      ((await (await get(off, "/")).json()) as { endpoints: { paid: Record<string, string> } }).endpoints
+        .paid,
+    ).not.toHaveProperty("/v1/check/:address/x");
+  });
+
+  it("answers the check with the fresh picture, marked fresh and whether it was reused", async () => {
+    const { deps } = withWatcher(watcher(async () => ({ x: xOk({ warnings: 1 }), reused: true })));
+    const out = await checkWithX(deps, SHOP as `0x${string}`);
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({
+      verdict: expect.any(String),
+      x: { fresh: true, reused: true, warnings: 1 },
+    });
+    expect((out.body.reasons as string[]).join(" ")).toMatch(/post on X names this address/);
+  });
+
+  it("refuses the sale when the search cannot be bought, so nothing is charged", async () => {
+    const budget = await checkWithX(
+      withWatcher(
+        watcher(async () => {
+          throw new BudgetExceeded(2, 2);
+        }),
+      ).deps,
+      SHOP as `0x${string}`,
+    );
+    expect(budget.status).toBe(503);
+    expect(budget.body.error).toBe("x_budget_spent");
+    expect(budget.retryAfter).toBeGreaterThan(0);
+    expect(budget.retryAfter).toBeLessThanOrEqual(86_400);
+
+    const refused = await checkWithX(
+      withWatcher(
+        watcher(async () => {
+          throw new PaymentRefused("insufficient funds");
+        }),
+      ).deps,
+      SHOP as `0x${string}`,
+    );
+    expect(refused.status).toBe(503);
+    expect(refused.body.error).toBe("x_search_unavailable");
+
+    const down = await checkWithX(
+      withWatcher(
+        watcher(async () => ({ x: xOk({ status: "error", error: "X search answered 503" }), reused: false })),
+      ).deps,
+      SHOP as `0x${string}`,
+    );
+    expect(down.status).toBe(502);
+    expect(down.body.message).toMatch(/503.*Nothing was charged/);
   });
 });

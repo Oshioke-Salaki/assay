@@ -17,6 +17,22 @@ export class BudgetExceeded extends Error {
  * dollar cap, and records every settlement (service, price, transaction) in paid_calls.
  * `pricePerCallUsd` is what the service quotes; it is checked against the 402 before paying.
  */
+export type SerialLock = <T>(task: () => Promise<T>) => Promise<T>;
+
+/**
+ * One paid request at a time: each needs its own settlement from the wallet, and the gateway
+ * settles them in turn, so parallel requests only queue up behind each other and time out. Two
+ * paying fetches from the same wallet (background and on-demand searches) share one lock.
+ */
+export function serialLock(): SerialLock {
+  let queue: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    const run = queue.then(task, task);
+    queue = run.catch(() => undefined);
+    return run;
+  };
+}
+
 export function createPayingFetch(opts: {
   db: DB;
   privateKey: Hex;
@@ -24,6 +40,8 @@ export function createPayingFetch(opts: {
   pricePerCallUsd: number;
   dailyCapUsd: number;
   fetchImpl?: typeof fetch;
+  /** Shared with other paying fetches from the same wallet; its own when absent. */
+  lock?: SerialLock;
 }): typeof fetch {
   const account = privateKeyToAccount(opts.privateKey);
   const maxUnits = BigInt(Math.round(opts.pricePerCallUsd * 1e6));
@@ -68,14 +86,7 @@ export function createPayingFetch(opts: {
     ).s;
   };
 
-  // One paid request at a time: each needs its own settlement from this wallet, and the gateway
-  // settles them in turn, so parallel requests only queue up behind each other and time out.
-  let queue: Promise<unknown> = Promise.resolve();
-  const serial = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = queue.then(task, task);
-    queue = run.catch(() => undefined);
-    return run;
-  };
+  const serial = opts.lock ?? serialLock();
 
   return ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
     serial(() => payOnce(input, init))) as typeof fetch;

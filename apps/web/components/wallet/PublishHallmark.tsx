@@ -93,7 +93,11 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       setStep({ kind: "working", text: "Checking your stablecoin balances…" });
       // Same-origin: next.config rewrites /x402/* to the Assay API.
       const url = `/x402/v1/attest/${subject}`;
-      const offers = await priceList(url);
+      // The API lists USD₮ first for agents. A person publishing from a browser is offered USA₮
+      // first: the US-regulated dollar, and the one verified humans get free from the faucet.
+      const offers = [...(await priceList(url))].sort(
+        (a, b) => Number(b.token.symbol === "USAT") - Number(a.token.symbol === "USAT"),
+      );
       const balances = await Promise.all(
         offers.map((o) =>
           pub
@@ -110,7 +114,7 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
       const offer = offers.find((o, i) => (balances[i] ?? 0n) >= o.amount);
       if (!offer)
         throw new AssayNotice(
-          `This wallet cannot cover $0.01 in ${offers.map((o) => o.token.symbol).join(", ")} on Celo. Top up a little and try again.`,
+          `This wallet holds less than $0.01 in ${offers.map((o) => o.token.symbol).join(", ")} on Celo. Verified humans can claim free USA₮ from Google Cloud's Celo faucet (link below), then try again.`,
         );
 
       setStep({
@@ -210,6 +214,23 @@ function Inner({ subject, rating }: { subject: `0x${string}`; rating: Rating }) 
         on Celo can then call <code>isInvestmentGrade({subject.slice(0, 8)}…)</code>. The score is valid for 7
         days.
         {rating === "NR" ? " This address is not rated yet, so contracts will read NR." : ""}
+      </p>
+      <p className={styles.muted} style={{ maxWidth: "72ch" }}>
+        Paid in USA₮ when your wallet holds it, otherwise USD₮, USDC or a Ripio stablecoin, gas-free. No
+        stablecoins yet? Verify once with the{" "}
+        <a className="link" href="https://self.xyz" target="_blank" rel="noreferrer">
+          Self app
+        </a>{" "}
+        and claim free USA₮ on Celo from the{" "}
+        <a
+          className="link"
+          href="https://cloud.google.com/application/web3/faucet/celo/mainnet"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Google Cloud faucet
+        </a>
+        .
       </p>
       {w.isConnected ? (
         <div className={styles.actions}>

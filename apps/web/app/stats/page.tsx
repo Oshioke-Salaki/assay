@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell, ErrorState, Panel } from "@/components/AppShell";
 import styles from "@/components/app.module.css";
+import { Hallmark } from "@/components/Hallmark";
 import { UsageChart, usageParts } from "@/components/UsageChart";
 import { API_PUBLIC, ApiError, api, type Stats } from "@/lib/api";
 import { addressUrl, ago, int, pct, short, txUrl, usdFine } from "@/lib/format";
@@ -12,8 +13,14 @@ export const metadata: Metadata = {
 };
 export const revalidate = 30;
 
+const VERDICT_PILL = { pass: styles.pillGood!, caution: styles.pillWarn!, block: styles.pillBad! };
+
 const SERVICES: Record<string, { label: string; what: string }> = {
-  "buy-x-search": { label: "X search through buy", what: "What X says about a seller" },
+  "buy-x-search": { label: "X search through buy", what: "What X says about every seller, weekly" },
+  "buy-x-search-ondemand": {
+    label: "X search bought by a paid check",
+    what: "Fresh evidence a buyer paid $0.01 for",
+  },
   unmatched: { label: "Payments whose answer was lost", what: "Found onchain by the reconciler" },
 };
 
@@ -251,6 +258,47 @@ export default async function StatsPage() {
         <p className={styles.kpiNote} style={{ marginTop: 12 }}>
           Shown as evidence on reports. Never part of a score.
         </p>
+      </Panel>
+
+      <Panel title="Assay rated by Assay" span={12} id="self">
+        {!s.self ? (
+          <p className={styles.empty}>This server does not take payments, so there is nothing to rate.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <Hallmark
+                organicUsd={s.self.organicUsd}
+                grossUsd={s.self.grossUsd}
+                rating={s.self.rating}
+                size="sm"
+              />
+              <span className={`${styles.pill} ${VERDICT_PILL[s.self.verdict]}`}>
+                Pre-payment check: {s.self.verdict}
+              </span>
+              <Link className="link" href={`/address/${s.self.address}`}>
+                Full report
+              </Link>
+            </div>
+            <dl className={styles.facts}>
+              <dt>Organic revenue</dt>
+              <dd>
+                {usdFine(s.self.organicUsd)}{" "}
+                <span className={styles.muted}>of {usdFine(s.self.grossUsd)} received</span>
+              </dd>
+              <dt>Independent payers</dt>
+              <dd>
+                {int(s.self.organicPayers)} <span className={styles.muted}>of {int(s.self.payers)}</span>
+              </dd>
+              <dt>Why</dt>
+              <dd>{s.self.reasons.join(" · ")}</dd>
+            </dl>
+            <p className={styles.kpiNote} style={{ maxWidth: "80ch" }}>
+              Assay's own PayTo address, scored by the same rules as everyone else. Payments from wallets
+              Assay funded are struck out, so this is the honest count of its independent customers. It will
+              change only when wallets Assay never funded pay for checks or hallmarks.
+            </p>
+          </div>
+        )}
       </Panel>
 
       <Panel title="The data underneath" span={12}>
