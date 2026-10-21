@@ -18,3 +18,4 @@ apps/web/.taste-skill
 # Local secrets kept outside .env files
 .admin-key
 **/.chainstack
+social

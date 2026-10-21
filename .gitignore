@@ -32,3 +32,6 @@ skills-lock.json
 # Local secrets that are not env files
 apps/server/.chainstack
 .admin-key
+
+# Images for posts; kept local
+social/

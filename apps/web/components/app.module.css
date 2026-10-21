@@ -586,13 +586,29 @@
     border-top: 1px solid var(--app-rule); /* taste-skill-ignore: app rule, KPI strip and lists are split by 1px dividers */
   }
 
+  /* Severity and amount share the first row; the title, detail and evidence run full width below. */
   .flag {
     grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .flag > :first-child {
+    justify-self: start;
+  }
+
+  .flagTitle {
+    order: 1;
+    grid-column: 1 / -1;
   }
 
   .flagDetail,
   .flagEvidence {
+    order: 2;
     grid-column: 1 / -1;
+  }
+
+  .flagEvidence {
+    order: 3;
   }
 
   .hideSm {
