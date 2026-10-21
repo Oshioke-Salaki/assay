@@ -100,10 +100,6 @@
   text-decoration: underline;
 }
 
-.key .facts {
-  margin-top: 12px;
-}
-
 .glossary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -465,6 +461,10 @@
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.key .facts {
+  margin-top: 12px;
 }
 
 .errorState {

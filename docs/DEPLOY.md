@@ -85,6 +85,10 @@ The Railway service still runs the version from before the outage. Before switch
 
 A failure opens one issue labelled `uptime`; GitHub emails everyone watching the repo. Further failures comment on that issue, and the first green run closes it. Run the same check by hand with `node scripts/uptime.mjs`, or from the Actions tab with "Run workflow". To point it at another deployment, set the repository variables `ASSAY_API_URL` and `ASSAY_WEB_URL`; `MAX_LAG_BLOCKS` changes the lag limit when you run it by hand.
 
+### Operator view
+
+Set `ADMIN_KEY` (at least 24 characters; `openssl rand -hex 32`) to switch on `GET /v1/admin` and the page at `/admin`. Without it the route answers 404. To change the key, set a new one with `fly secrets set ADMIN_KEY=...`; the old one stops working when the machine restarts. Public usage and revenue numbers are at `/stats` and need no key.
+
 ## Publishing the packages
 
 `assayscore-core`, `assayscore` (the SDK) and `assayscore-mcp` publish to npm from the monorepo. npm requires two-factor authentication to publish, and only the npm CLI handles its browser approval, so pack with pnpm (which turns `workspace:*` into real versions) and publish the tarballs with npm, core first:

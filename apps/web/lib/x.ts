@@ -5,7 +5,7 @@ import type { XMentions } from "./api";
  * one sentence wherever they look. It never changes the verdict: anyone can post about anyone.
  */
 export function xReason(m: XMentions | null | undefined): string | null {
-  if (!m || m.status !== "ok") return null;
+  if (m?.status !== "ok") return null;
   if (m.warnings > 0)
     return `${m.warnings === 1 ? "1 post on X names" : `${m.warnings} posts on X name`} this address next to words like scam or hack; read ${m.warnings === 1 ? "it" : "them"} before paying`;
   if (m.weakWarnings > 0)

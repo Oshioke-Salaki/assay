@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createPublicClient, fallback, http, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
@@ -17,6 +18,7 @@ import { SETTLEMENT_CURSOR, SettlementIndexer } from "./indexer/settlements.js";
 import { SqdClient, sleep } from "./indexer/sqd.js";
 import { createPayingFetch, type ReconcileReader, reconcilePaidCalls } from "./lib/buy.js";
 import { log } from "./lib/log.js";
+import { Usage } from "./usage.js";
 
 export interface Runtime {
   env: Env;
@@ -30,6 +32,7 @@ export interface Runtime {
   syncOnce: (signal?: AbortSignal) => Promise<{ settlements: number; registry: number }>;
   /** Run indexer and enrichment loops until the signal aborts. */
   runWorkers: (signal: AbortSignal) => Promise<void>;
+  usage: Usage;
   close: () => void;
 }
 
@@ -51,6 +54,8 @@ export function createRuntime(env: Env): Runtime {
     batch: { multicall: true },
   }) as PublicClient;
   const analysis = new Analysis(db);
+  // The salt keeps caller hashes unlinkable to addresses; a key that never leaves the server.
+  const usage = new Usage(db, env.ADMIN_KEY ?? env.INTERNAL_API_KEY ?? randomBytes(32).toString("hex"));
   // SQD first; if the portal is down, the same queries are served from Celo RPC for the tail.
   const rawSqd = new SqdClient(env.SQD_URL);
   const sqd = new FailoverSource(rawSqd, new RpcSource(rpc as unknown as RpcReader));
@@ -176,6 +181,10 @@ export function createRuntime(env: Env): Runtime {
     status,
     syncOnce,
     runWorkers,
-    close: () => db.close(),
+    usage,
+    close: () => {
+      usage.flush();
+      db.close();
+    },
   };
 }

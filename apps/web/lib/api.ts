@@ -188,3 +188,81 @@ export async function tryApi<T>(path: string, revalidate = 30): Promise<T | null
     return null;
   }
 }
+
+export type UsageKind =
+  | "report"
+  | "check_paid"
+  | "check_quoted"
+  | "attest_paid"
+  | "attest_quoted"
+  | "agents"
+  | "economy"
+  | "api_other"
+  | "rate_limited";
+
+/** Public numbers about Assay itself, from GET /v1/stats. */
+export interface Stats {
+  asOf: number;
+  usage: {
+    days: { day: number; visitors: number; counts: Record<UsageKind, number> }[];
+    totals: Record<UsageKind, number>;
+    note: string;
+  } | null;
+  revenue: {
+    payTo: Address;
+    payments: number;
+    usd: number;
+    payers: number;
+    byToken: { symbol: string; payments: number; usd: number }[];
+    daily: { day: number; payments: number; usd: number }[];
+    recent: { tx: string; ts: number; payer: Address; token: string; usd: number }[];
+  } | null;
+  spend: { services: { service: string; calls: number; usd: number; lastTs: number }[]; usd: number };
+  x: { sellersSearched: number; withMentions: number; withWarnings: number; lastSearchAt: number | null };
+  data: {
+    settlementsBlock: number;
+    finalizedHead: number | null;
+    lagBlocks: number | null;
+    lastSettlementTs: number | null;
+    fundingCoverage: number | null;
+  };
+}
+
+/** Operator view, from GET /v1/admin with the admin key. */
+export interface AdminStats {
+  asOf: number;
+  wallets: {
+    role: string;
+    address: Address;
+    celo: number | null;
+    tokens: { symbol: string; balance: number | null }[];
+  }[];
+  budgets: { service: string; capUsd: number; spentUsd: number; calls: number; failed: number }[];
+  x: { wanted: number; neverSearched: number; errorsToday: number };
+  recentPaidCalls: {
+    id: number;
+    ts: number;
+    service: string;
+    status: number;
+    usd: number;
+    txHash: string | null;
+    note: string | null;
+  }[];
+  problems: {
+    id: number;
+    t: string;
+    level: "warn" | "error";
+    msg: string;
+    fields?: Record<string, unknown>;
+  }[];
+  database: { sizeMb: number; settlements: number; agents: number };
+  process: {
+    uptimeMin: number;
+    rssMb: number;
+    heapMb: number;
+    node: string;
+    region: string | null;
+    image: string | null;
+    role: string;
+  };
+}

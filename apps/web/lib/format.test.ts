@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fineness, finenessWords, pct, short, usd } from "./format";
+import { fineness, finenessWords, pct, short, usd, usdFine } from "./format";
 import { labelIndexes, niceTicks } from "./ticks";
 
 describe("format", () => {
@@ -40,5 +40,23 @@ describe("chart ticks", () => {
     expect(l.length).toBeGreaterThanOrEqual(4);
     expect(l.length).toBeLessThanOrEqual(7);
     expect(labelIndexes(3)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("usdFine", () => {
+  it("shows the sub-cent amounts Assay charges and pays", () => {
+    expect(usdFine(0.002)).toBe("$0.002");
+    expect(usdFine(0.005)).toBe("$0.005");
+    expect(usdFine(0.012)).toBe("$0.012");
+    expect(usdFine(0.5)).toBe("$0.50");
+    expect(usdFine(0.25)).toBe("$0.25");
+  });
+
+  it("handles nothing, zero and whole dollars", () => {
+    expect(usdFine(null)).toBe("–");
+    expect(usdFine(undefined)).toBe("–");
+    expect(usdFine(Number.NaN)).toBe("–");
+    expect(usdFine(0)).toBe("$0");
+    expect(usdFine(12)).toMatch(/^\$12/);
   });
 });

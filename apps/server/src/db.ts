@@ -160,6 +160,20 @@ const MIGRATIONS: string[] = [
     paid      INTEGER NOT NULL
   ) WITHOUT ROWID;
   `,
+  // v5: API usage per day and kind, and distinct callers as salted hashes (see usage.ts).
+  `
+  CREATE TABLE usage_daily (
+    day   INTEGER NOT NULL,
+    kind  TEXT    NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (day, kind)
+  ) WITHOUT ROWID;
+  CREATE TABLE usage_visitors (
+    day  INTEGER NOT NULL,
+    hash TEXT    NOT NULL,
+    PRIMARY KEY (day, hash)
+  ) WITHOUT ROWID;
+  `,
 ];
 
 export function openDatabase(path: string): DB {

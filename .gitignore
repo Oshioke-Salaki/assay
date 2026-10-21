@@ -28,3 +28,7 @@ apps/web/.taste-skill/app-*/
 skills-lock.json
 .vercel
 .env*
+
+# Local secrets that are not env files
+apps/server/.chainstack
+.admin-key

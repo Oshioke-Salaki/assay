@@ -243,7 +243,7 @@ export function xSearchUrl(address: string): string {
 
 /** One sentence for a pre-payment check, or nothing when X has nothing to add. */
 export function xReason(m: XMentions | null): string | null {
-  if (!m || m.status !== "ok") return null;
+  if (m?.status !== "ok") return null;
   if (m.warnings > 0)
     return `${m.warnings === 1 ? "1 post on X names" : `${m.warnings} posts on X name`} this address next to words like scam or hack; read ${m.warnings === 1 ? "it" : "them"} before paying`;
   if (m.weakWarnings > 0)

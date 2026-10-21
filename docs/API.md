@@ -44,6 +44,13 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 | `GET /v1/methodology` | version, thin-file thresholds, rating floors, prices |
 | `GET /.well-known/agent-registration.json` | Assay's ERC-8004 registration file |
 | `GET /health` | `{ ok: true }` |
+| `GET /v1/stats` | Assay's own numbers, shown at [assayscore.xyz/stats](https://assayscore.xyz/stats): `usage` (requests per UTC day and kind for 30 days, distinct callers per day), `revenue` (settlements to Assay's PayTo: total, payers, by token, per day, the last 10 with transactions), `spend` (paid services by total), `x` (sellers searched, with mentions, with warnings) and `data` (indexed block, lag, funding coverage). Cached for 30 seconds |
+
+`/v1/stats` counts callers as salted hashes of their IP, one per day, so days cannot be linked and no address is kept; the hashes are deleted after 90 days. Health, status, stats, preflight and operator requests are not counted.
+
+### Operator
+
+`GET /v1/admin` with `Authorization: Bearer <ADMIN_KEY>` returns the agent wallet's and PayTo's balances (CELO, USDC, USD₮, USA₮), today's spend against each daily cap, the X queue, the last 20 paid calls including failures, the last 50 warnings and errors since restart, and the database and process. It answers 404 when `ADMIN_KEY` is not set, 401 for a missing or wrong key, and is never cached. The page at [assayscore.xyz/admin](https://assayscore.xyz/admin) asks for the key, keeps it in that tab's session storage only, and refreshes every 30 seconds.
 
 ## What X says (`x`)
 

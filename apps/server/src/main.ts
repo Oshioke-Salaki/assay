@@ -24,6 +24,12 @@ if (env.ROLE !== "indexer") {
 
 const workers = env.ROLE !== "api" ? runtime.runWorkers(controller.signal) : Promise.resolve();
 
+// Usage counts live in memory between writes; write them twice a minute and drop old caller hashes daily.
+const flusher = setInterval(() => runtime.usage.flush(), 30_000);
+flusher.unref();
+const pruner = setInterval(() => runtime.usage.prune(), 86_400_000);
+pruner.unref();
+
 // An API-only process shares the database with a separate indexer process, so it cannot be told
 // when new blocks land. It watches the cursors instead and refreshes its snapshot when they move.
 let watcher: NodeJS.Timeout | null = null;
@@ -47,6 +53,8 @@ async function shutdown(signal: string) {
   log.info("shutting down", { signal });
   controller.abort();
   if (watcher) clearInterval(watcher);
+  clearInterval(flusher);
+  clearInterval(pruner);
   const force = setTimeout(() => process.exit(1), 10_000);
   force.unref();
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));

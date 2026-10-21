@@ -26,7 +26,9 @@ import { readXMentions, wantXMentions, X_REFRESH, type XMentions, xReason } from
 import type { Env } from "../env.js";
 import { log } from "../lib/log.js";
 import { proveSettlement } from "../proof.js";
+import { classify, type Usage } from "../usage.js";
 import { PRICES, paidMiddleware } from "./paid.js";
+import { adminStats, publicStats } from "./stats.js";
 
 export interface IndexStatus {
   settlementsBlock: number;
@@ -45,6 +47,8 @@ export interface AppDeps {
   status: () => IndexStatus;
   /** Tests pass false so the x402 middleware does not call the facilitator at startup. */
   syncFacilitatorOnStart?: boolean;
+  /** Counts what the API is used for; absent in tests that do not care. */
+  usage?: Usage | null;
 }
 
 const LIST_LIMIT = 100;
@@ -70,6 +74,17 @@ export function createApp(deps: AppDeps): Hono {
     );
     c.res.headers.append("vary", "Origin");
   });
+  // Count each finished request by kind. The site's own page renders carry the internal key and
+  // name no visitor, so they count as use but not as a caller.
+  app.use("*", async (c, next) => {
+    await next();
+    const usage = deps.usage;
+    if (!usage) return;
+    const kind = classify(c.req.method, c.req.path, c.res.status);
+    if (!kind) return;
+    const internal = sameSecret(c.req.header("x-assay-internal"), env.INTERNAL_API_KEY);
+    usage.record(kind, internal ? (c.req.header("x-assay-client-ip")?.trim() ?? null) : clientIp(c));
+  });
   app.use("*", secureHeaders({ crossOriginResourcePolicy: "cross-origin" }));
   app.use(
     "*",
@@ -78,7 +93,13 @@ export function createApp(deps: AppDeps): Hono {
       allowMethods: ["GET", "OPTIONS"],
       // x402 browser clients send access-control-expose-headers on their paid retry; refusing it
       // fails the preflight and the payment looks like a network error.
-      allowHeaders: ["content-type", "payment-signature", "x-payment", "access-control-expose-headers"],
+      allowHeaders: [
+        "content-type",
+        "payment-signature",
+        "x-payment",
+        "access-control-expose-headers",
+        "authorization",
+      ],
       exposeHeaders: ["payment-required", "payment-response", "x-payment-response"],
       maxAge: 600,
     }),
@@ -358,6 +379,30 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   /** Proof of payment for every call Assay paid a service it does not own (buy track). */
+  /** Public numbers about Assay itself: usage, revenue at its PayTo, spend, data freshness. */
+  let statsCache: { at: number; body: unknown } | null = null;
+  app.get("/v1/stats", free, (c) => {
+    const now = Date.now();
+    if (!statsCache || now - statsCache.at > 30_000)
+      statsCache = { at: now, body: publicStats(deps.db, env, deps.usage ?? null, deps.status(), now) };
+    c.header("cache-control", "public, max-age=30");
+    return c.json(statsCache.body as Record<string, unknown>);
+  });
+
+  /** Operator view behind ADMIN_KEY. Without the key set, the route does not exist. */
+  let adminCache: { at: number; body: unknown } | null = null;
+  app.get("/v1/admin", free, async (c) => {
+    if (!env.ADMIN_KEY) return c.json({ error: "not_found", message: "Not found." }, 404);
+    const given = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    c.header("cache-control", "no-store");
+    if (!sameSecret(given, env.ADMIN_KEY))
+      return c.json({ error: "unauthorized", message: "A valid admin key is required." }, 401);
+    const now = Date.now();
+    if (!adminCache || now - adminCache.at > 15_000)
+      adminCache = { at: now, body: await adminStats(deps.db, env, deps.rpc, now) };
+    return c.json(adminCache.body as Record<string, unknown>);
+  });
+
   app.get("/v1/paid-calls", free, (c) => {
     const limit = clampInt(c.req.query("limit"), 1, 500, 100);
     return c.json({
@@ -494,15 +539,7 @@ export function snapshotCache(version: () => number, maxEntries: number): Middle
  */
 export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHandler {
   const hits = new Map<string, { n: number; reset: number }>();
-  const trusted = (c: Context) => {
-    if (!internalKey) return false;
-    const given = c.req.header("x-assay-internal") ?? "";
-    // Constant-time comparison so the key cannot be guessed byte by byte.
-    if (given.length !== internalKey.length) return false;
-    let diff = 0;
-    for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ internalKey.charCodeAt(i);
-    return diff === 0;
-  };
+  const trusted = (c: Context) => sameSecret(c.req.header("x-assay-internal"), internalKey);
   let sweep = Date.now() + 60_000;
   return async (c, next) => {
     const relayed = trusted(c) ? c.req.header("x-assay-client-ip")?.trim() : undefined;
@@ -528,6 +565,14 @@ export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHa
     }
     await next();
   };
+}
+
+/** Constant-time comparison, so a key cannot be guessed byte by byte from response times. */
+export function sameSecret(given: string | undefined, secret: string | undefined): boolean {
+  if (!secret || !given || given.length !== secret.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ secret.charCodeAt(i);
+  return diff === 0;
 }
 
 function clientIp(c: Context): string {

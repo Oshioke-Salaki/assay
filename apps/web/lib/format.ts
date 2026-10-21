@@ -11,6 +11,14 @@ export function usd(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
+/** Dollars to the tenth of a cent, for the small amounts Assay charges and pays ($0.002, $0.005). */
+export function usdFine(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "–";
+  if (n === 0) return "$0";
+  if (Math.abs(n) >= 1) return usd(n);
+  return `$${n.toFixed(3).replace(/0$/, "")}`;
+}
+
 export function int(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return "–";
   return Math.round(n).toLocaleString("en-US");

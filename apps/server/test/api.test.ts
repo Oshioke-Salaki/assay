@@ -346,7 +346,7 @@ describe("internal key", () => {
     expect((await get(app, "/v1/economy", ip)).status).toBe(200);
     expect((await get(app, "/v1/economy", ip)).status).toBe(429);
     expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": `${key}x` })).status).toBe(429);
-    expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": "k".repeat(31) + "j" })).status).toBe(
+    expect((await get(app, "/v1/economy", { ...ip, "x-assay-internal": `${"k".repeat(31)}j` })).status).toBe(
       429,
     );
   });
