@@ -134,9 +134,11 @@ export default async function EconomyPage() {
                   <tr key={s.address}>
                     <td>
                       <Link href={`/address/${s.address}`}>
-                        {s.agentIds[0] ? `Agent #${s.agentIds[0]}` : short(s.address)}
+                        {s.name ?? (s.agentIds[0] ? `Agent #${s.agentIds[0]}` : short(s.address))}
                       </Link>
-                      {s.agentIds[0] ? <div className={styles.muted}>{short(s.address)}</div> : null}
+                      {s.name || s.agentIds[0] ? (
+                        <div className={styles.muted}>{short(s.address)}</div>
+                      ) : null}
                     </td>
                     <td className={styles.r}>{usd(s.organicUsd)}</td>
                     <td className={`${styles.r} ${styles.hideSm}`}>{usd(s.grossUsd)}</td>

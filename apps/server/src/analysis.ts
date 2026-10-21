@@ -352,15 +352,21 @@ function loadContext(db: DB): AssessmentContext {
   const humans = new Map<Address, HumanInfo>();
   for (const r of db
     .prepare(
-      "SELECT address, agent_id, nullifier, fresh FROM humans WHERE agent_id IS NOT NULL AND nullifier IS NOT NULL",
+      "SELECT address, agent_id, nullifier, fresh, visa_tier FROM humans WHERE agent_id IS NOT NULL AND nullifier IS NOT NULL",
     )
     .iterate() as IterableIterator<{
     address: Address;
     agent_id: string;
     nullifier: string;
     fresh: number;
+    visa_tier: number;
   }>) {
-    humans.set(r.address, { agentId: r.agent_id, nullifier: r.nullifier, fresh: r.fresh === 1 });
+    humans.set(r.address, {
+      agentId: r.agent_id,
+      nullifier: r.nullifier,
+      fresh: r.fresh === 1,
+      visaTier: r.visa_tier,
+    });
   }
   const agentIds = new Map<Address, string[]>();
   const add = (a: Address | null, id: string) => {

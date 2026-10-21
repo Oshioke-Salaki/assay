@@ -48,6 +48,8 @@ export interface HumanInfo {
   /** Opaque per-human nullifier: equal nullifiers mean the same human. */
   nullifier: string;
   fresh: boolean;
+  /** Celo Agent Visa tier: 0 none, 1 Tourist, 2 Work, 3 Citizenship. Shown, never scored. */
+  visaTier?: number;
 }
 
 export interface AssessmentContext {
@@ -104,6 +106,10 @@ export interface PayerLine {
   funder: Address | null;
   human: boolean;
   established: boolean;
+  /** First transaction of any kind touching the payer, when its funding has been traced. */
+  firstSeenAt: number | null;
+  /** The funding trace for this payer has run (even if it found no funder). */
+  traced: boolean;
   sampleTxs: Hash[];
 }
 

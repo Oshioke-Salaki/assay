@@ -185,3 +185,13 @@ export const authorizationUsedEventAbi = [
     ],
   },
 ] as const;
+
+export const celoAgentVisaAbi = [
+  {
+    type: "function",
+    name: "getTier",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+] as const;

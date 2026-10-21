@@ -17,13 +17,14 @@ async function connect(fetchImpl: typeof fetch) {
 }
 
 describe("Assay MCP tools", () => {
-  it("lists four read-only tools", async () => {
+  it("lists five read-only tools", async () => {
     const client = await connect(vi.fn());
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "assay_check_seller",
       "assay_economy",
       "assay_find_agents",
+      "assay_independent_payers",
       "assay_report",
     ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint)).toBe(true);

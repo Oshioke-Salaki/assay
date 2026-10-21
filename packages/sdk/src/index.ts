@@ -98,6 +98,41 @@ export interface PaidCheck extends CheckResult {
     | null;
 }
 
+export interface IndependentReport {
+  address: Address;
+  rule: string;
+  window: { from: number; to: number };
+  totals: {
+    payers: number;
+    independent: number;
+    notIndependent: number;
+    unknown: number;
+    independentUsd: number;
+    independentInWindow: number;
+    independentUsdInWindow: number;
+    usdInWindow: number;
+  };
+  rows: {
+    payer: Address;
+    independent: boolean | null;
+    reasons: string[];
+    usd: number;
+    count: number;
+    inWindow: { usd: number; count: number };
+  }[];
+}
+
+export interface Watch {
+  id: string;
+  /** Shown once, on creation; null when an existing watch was extended. */
+  secret: string | null;
+  address: Address;
+  url: string;
+  expiresAt: number;
+  renewed: boolean;
+  note: string;
+}
+
 export interface Attestation {
   domain: { name: string; version: string; chainId: number; verifyingContract: Address };
   primaryType: "Score";
@@ -144,6 +179,43 @@ export function createAssay(opts: AssayOptions = {}) {
       if (q?.offset) p.set("offset", String(q.offset));
       const qs = p.toString();
       return call<{ total: number; rows: unknown[] }>(plain, `/v1/agents${qs ? `?${qs}` : ""}`);
+    },
+    /** Free: which of a seller's payers count as independent users by the hackathon's rule, with reasons. */
+    independent: (a: string, q?: { from?: number; to?: number; limit?: number }) => {
+      const p = new URLSearchParams();
+      if (q?.from) p.set("from", String(q.from));
+      if (q?.to) p.set("to", String(q.to));
+      if (q?.limit) p.set("limit", String(q.limit));
+      const qs = p.toString();
+      return call<IndependentReport>(plain, `/v1/independent/${requireAddress(a)}${qs ? `?${qs}` : ""}`);
+    },
+    /** The SVG badge URL for an address, for READMEs. */
+    badgeUrl: (a: string) => `${base}/v1/badge/${requireAddress(a)}.svg`,
+    /**
+     * Paid ($0.05 for thirty days): alerts to `url` when the address's rating or verdict changes, a
+     * critical finding appears, or warning posts show up on X. Keep the returned secret: deliveries
+     * are signed with it. Needs `payingFetch`.
+     */
+    watch: async (a: string, url: string) => {
+      if (!opts.payingFetch) throw new AssayError(0, "no_paying_fetch", "watch() needs an x402 payingFetch");
+      const res = await opts.payingFetch(`${base}/v1/watch`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ address: requireAddress(a), url }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | Watch
+        | { error?: string; message?: string }
+        | null;
+      if (!res.ok) {
+        const b = (body ?? {}) as { error?: string; message?: string };
+        throw new AssayError(
+          res.status,
+          b.error ?? "http_error",
+          b.message ?? `Assay returned ${res.status}`,
+        );
+      }
+      return body as Watch;
     },
     /** Paid ($0.002, or $0.01 with `freshX`): verdict plus a signed score. Needs `payingFetch`. */
     check: (a: string, options: CheckOptions = {}) => {

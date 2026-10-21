@@ -174,6 +174,46 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (day, hash)
   ) WITHOUT ROWID;
   `,
+  // v6: Celo Agent Visa tier per Self agent; claimed seller pages; rating-change alerts.
+  `
+  ALTER TABLE humans ADD COLUMN visa_tier INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE claims (
+    address    TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    url        TEXT,
+    logo_url   TEXT,
+    x          TEXT,
+    signature  TEXT NOT NULL,
+    issued_at  INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  ) WITHOUT ROWID;
+  CREATE TABLE watches (
+    id          TEXT PRIMARY KEY,
+    address     TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    secret      TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL,
+    last_state  TEXT,
+    failures    INTEGER NOT NULL DEFAULT 0,
+    disabled_at INTEGER,
+    note        TEXT
+  ) WITHOUT ROWID;
+  CREATE INDEX watches_address ON watches (address);
+  CREATE TABLE watch_deliveries (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    watch_id     TEXT    NOT NULL,
+    event        TEXT    NOT NULL,
+    payload      TEXT    NOT NULL,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    next_at      INTEGER NOT NULL,
+    delivered_at INTEGER,
+    last_status  INTEGER,
+    last_error   TEXT,
+    created_at   INTEGER NOT NULL
+  );
+  CREATE INDEX watch_deliveries_due ON watch_deliveries (delivered_at, next_at);
+  `,
 ];
 
 export function openDatabase(path: string): DB {

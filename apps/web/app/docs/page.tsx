@@ -15,6 +15,9 @@ const SECTIONS = [
   ["mcp", "MCP server"],
   ["registry", "AssayRegistry"],
   ["reviews", "Payment-verified reviews"],
+  ["alerts", "Alerts"],
+  ["claim", "Claim your page"],
+  ["independent", "Independent payers"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
   ["selfhost", "Run your own"],
@@ -183,8 +186,10 @@ try {
 
         <Panel title="MCP server" id="mcp">
           <p>
-            Four read-only tools for any MCP client: <code>assay_check_seller</code>,{" "}
-            <code>assay_report</code>, <code>assay_find_agents</code> and <code>assay_economy</code>.
+            Read-only tools for any MCP client: <code>assay_check_seller</code> (with <code>fresh_x</code> to
+            buy an X search on the spot when the client can pay), <code>assay_report</code>,{" "}
+            <code>assay_independent_payers</code>, <code>assay_find_agents</code> and{" "}
+            <code>assay_economy</code>.
           </p>
           <Code label="Add the MCP server to Claude Code">{`
 claude mcp add assay -- npx -y assayscore-mcp
@@ -296,14 +301,60 @@ function payOut(address seller) external {
           </p>
         </Panel>
 
+        <Panel title="Alerts" id="alerts">
+          <p>
+            Watch an address and get a signed webhook when something changes: the rating, the pre-payment
+            verdict, a new critical finding, or posts with warning words naming it on X. One payment of $0.05
+            over x402 covers thirty days; paying again for the same address and URL extends it.
+          </p>
+          <Code label="Start a watch">{`
+POST ${API_PUBLIC}/v1/watch        # x402, $0.05
+{ "address": "0xSeller…", "url": "https://your.app/assay-webhook" }
+
+# 201 → { "id": "w_…", "secret": "…", "expiresAt": 1764000000 }
+# The first delivery, watch.started, arrives within two minutes.
+          `}</Code>
+          <p>
+            Every delivery is a JSON POST with <code>x-assay-event</code>, <code>x-assay-timestamp</code> and{" "}
+            <code>x-assay-signature: sha256=HMAC(secret, timestamp + "." + body)</code>. Check the signature,
+            then read <code>event</code>, <code>detail</code>, <code>previous</code> and <code>current</code>.
+            A delivery that fails is retried for up to half a day; URLs must be public https, and redirects
+            are not followed. <code>GET /v1/watch/:id</code> and <code>DELETE /v1/watch/:id</code> take the
+            secret in <code>x-assay-watch-secret</code>.
+          </p>
+        </Panel>
+
+        <Panel title="Claim your page" id="claim">
+          <p>
+            If a seller address is yours, open its report and use &ldquo;Claim this page&rdquo;: connect that
+            wallet, sign one message (it moves no money), and your name, website and X handle appear on the
+            report and in the seller lists. A claim says &ldquo;this wallet&rsquo;s owner chose this
+            name&rdquo;; names that read as someone else&rsquo;s are refused. Every address also has a badge
+            for READMEs that shows its current rating and links to the report.
+          </p>
+          <Code label="Badge">{`
+[![Assay rating](${API_PUBLIC}/v1/badge/0xYourAddress.svg)](https://assayscore.xyz/address/0xYourAddress)
+          `}</Code>
+        </Panel>
+
+        <Panel title="Independent payers" id="independent">
+          <p>
+            The Agents on Open Rails hackathon counts a payer only if it is not yours, was not first funded by
+            you or your own funder, and was active on Celo before the window started. Assay already traces all
+            three, so any team can see how its payers come out under that rule, free, with each payer&rsquo;s
+            volume inside the window: on every report, and at <code>GET /v1/independent/:address</code>.
+          </p>
+        </Panel>
+
         <Panel title="Pricing and limits" id="pricing">
           <p>
             Reports in the browser and the free endpoints cost nothing, within 60 calls a minute. Paid
             endpoints are $0.002 per check, $0.01 per check with an X search bought now for you (
-            <code>/v1/check/:address/x</code>), and $0.01 per full report with attestation, paid over x402
-            through Celo&rsquo;s facilitator in USD₮ by default, or USDC, USA₮, or Ripio&rsquo;s wARS, wBRL
-            and wCOP at the day&rsquo;s exchange rate. Nobody needs CELO for gas, wFIAT included. The seller
-            pays the facilitator&rsquo;s fee; buyers pay only the price.
+            <code>/v1/check/:address/x</code>), $0.01 per full report with attestation, and $0.05 for thirty
+            days of alerts on one address, paid over x402 through Celo&rsquo;s facilitator in USD₮ by default,
+            or USDC, USA₮, or Ripio&rsquo;s wARS, wBRL and wCOP at the day&rsquo;s exchange rate. Nobody needs
+            CELO for gas, wFIAT included. The seller pays the facilitator&rsquo;s fee; buyers pay only the
+            price.
           </p>
           <p>
             For a payment under a cent, the free report is the right tool: the paid check exists for the

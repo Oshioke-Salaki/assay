@@ -1,17 +1,18 @@
 import type { Flag } from "assayscore-core";
-import { THIN_FILE, verdictFor } from "assayscore-core";
+import { THIN_FILE, VISA_TIERS, verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell, ErrorState, Panel } from "@/components/AppShell";
 import { AssayBar } from "@/components/AssayBar";
 import styles from "@/components/app.module.css";
+import { ClaimPanel } from "@/components/ClaimPanel";
 import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
 import { XPanel } from "@/components/XPanel";
-import { type AddressResponse, API_PUBLIC, ApiError, api } from "@/lib/api";
+import { type AddressResponse, API_PUBLIC, ApiError, api, type Independent, tryApi } from "@/lib/api";
 import { addressUrl, date, fineness, int, pct, RATING_WORDS, short, txUrl, usd } from "@/lib/format";
 import { xReason } from "@/lib/x";
 
@@ -65,6 +66,9 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
     );
   }
   const { assessment: a, agents, x } = data;
+  const claim = data.claim ?? null;
+  const independent = a.seller.payers > 0 ? await tryApi<Independent>(`/v1/independent/${address}`) : null;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://assayscore.xyz";
   // The verdict is recomputed here with the current rule, so the page is right even while the
   // API serves an older build.
   const ledgerCheck = verdictFor(a);
@@ -85,13 +89,36 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             <Link href="/economy">Economy</Link> / Report
           </p>
           <h1 className={styles.title}>
-            {agents[0]?.name ?? (agents[0] ? `Agent #${agents[0].agentId}` : short(address))}
+            {claim?.name ?? agents[0]?.name ?? (agents[0] ? `Agent #${agents[0].agentId}` : short(address))}
           </h1>
           <p className={`${styles.muted} ${styles.addr}`}>
             <a href={addressUrl(address)} className="link">
               {address}
             </a>
           </p>
+          {claim ? (
+            <p
+              className={styles.muted}
+              style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "center" }}
+            >
+              <span className={`${styles.pill} ${styles.pillGood}`}>Claimed by this wallet</span>
+              {claim.url ? (
+                <a className="link" href={claim.url} target="_blank" rel="noreferrer nofollow">
+                  {claim.url.replace(/^https:\/\//, "")}
+                </a>
+              ) : null}
+              {claim.x ? (
+                <a
+                  className="link"
+                  href={`https://x.com/${claim.x}`}
+                  target="_blank"
+                  rel="noreferrer nofollow"
+                >
+                  @{claim.x}
+                </a>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         <div className={styles.actions}>
           {a.rating !== "NR" ? (
@@ -256,6 +283,18 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
               <span className={styles.dash}>no human proof</span>
             )}
           </dd>
+          {a.identity.human ? (
+            <>
+              <dt>Celo Agent Visa</dt>
+              <dd>
+                {a.identity.human.visaTier ? (
+                  `${VISA_TIERS[a.identity.human.visaTier] ?? "tier " + a.identity.human.visaTier}`
+                ) : (
+                  <span className={styles.dash}>none yet</span>
+                )}
+              </dd>
+            </>
+          ) : null}
           <dt>First funded by</dt>
           <dd>
             {a.identity.funding?.funder ? (
@@ -319,8 +358,61 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
         </Panel>
       ) : null}
 
+      {independent ? (
+        <Panel
+          title="Independent payers, by the hackathon's rule"
+          span={12}
+          id="independent"
+          action={
+            <a className="link" href={`${API_PUBLIC}/v1/independent/${address}`}>
+              Every payer, as JSON
+            </a>
+          }
+        >
+          <div className={styles.kpis} style={{ "--n": 3 } as React.CSSProperties}>
+            <div className={styles.kpi}>
+              <p className={styles.kpiLabel}>Count as independent</p>
+              <p className={`${styles.kpiValue} ${styles.kpiData}`}>
+                {int(independent.totals.independent)}
+                <span className={styles.muted} style={{ fontSize: "1rem" }}>
+                  {" "}
+                  of {int(independent.totals.payers)}
+                </span>
+              </p>
+              <p className={styles.kpiNote}>
+                {independent.totals.unknown > 0
+                  ? `${int(independent.totals.unknown)} not traced yet`
+                  : "all payers traced"}
+              </p>
+            </div>
+            <div className={styles.kpi}>
+              <p className={styles.kpiLabel}>Paid by them in the window</p>
+              <p className={styles.kpiValue}>{usd(independent.totals.independentUsdInWindow)}</p>
+              <p className={styles.kpiNote}>
+                from {int(independent.totals.independentInWindow)} of them, {date(independent.window.from)} to{" "}
+                {date(independent.window.to)}
+              </p>
+            </div>
+            <div className={styles.kpi}>
+              <p className={styles.kpiLabel}>Do not count</p>
+              <p className={styles.kpiValue}>{int(independent.totals.notIndependent)}</p>
+              <p className={styles.kpiNote}>funded by the seller, in its loop, or new to Celo</p>
+            </div>
+          </div>
+          <p className={styles.kpiNote} style={{ marginTop: 12, maxWidth: "80ch" }}>
+            The Agents on Open Rails hackathon counts a payer only if it is not yours, was not first funded by
+            you or your own funder, and was active on Celo before the window started. Assay already traces all
+            three, so any team can check its own numbers here. Wallets you created and funded never count.
+          </p>
+        </Panel>
+      ) : null}
+
       <Panel title="Publish this hallmark onchain" span={12} id="publish">
         <PublishHallmark subject={address} rating={a.rating} />
+      </Panel>
+
+      <Panel title={claim ? "Your page" : "Claim this page"} span={12} id="claim">
+        <ClaimPanel subject={address} claim={claim} siteUrl={siteUrl} />
       </Panel>
 
       {a.components ? (

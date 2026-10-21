@@ -76,6 +76,18 @@ client.setSpendControls({
 });
 ```
 
+## Alerts, independent payers and badges
+
+```ts
+// $0.05 for thirty days of signed webhooks when the rating or verdict moves. Keep the secret.
+const { id, secret } = await assay.watch(seller, "https://your.app/assay-webhook");
+
+// Free: which payers count as independent users by the hackathon's rule, with reasons.
+const { totals, rows } = await assay.independent(seller);
+
+assay.badgeUrl(seller); // SVG for a README
+```
+
 ## Links
 
 - API reference: https://github.com/Oshioke-Salaki/assay/blob/main/docs/API.md

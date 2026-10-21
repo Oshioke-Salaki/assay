@@ -79,6 +79,10 @@ Each address is searched again weekly. A failed search is retried after a day.
 
 **Not scored, on purpose.** Anyone can post "0x… is a scam" about a competitor, and a victim's plea or a bot's bait names an address next to the same words. A score that a post can move is worth nothing. So posts never change a rating, a score, a verdict or a signed attestation. They add one plain sentence to the check's reasons and are listed with links, so a person or an agent can read them before paying. The wording says what the posts contain ("name this address next to words like scam or hack"), not what the seller did.
 
+## Independent payers, by the hackathon's rule
+
+The Agents on Open Rails hackathon defines an independent user as a wallet that is not the project's, was not first funded by the project or the project's own funder, and had its own activity on Celo before the window started (6 Oct 2026, 12:00 UTC). Assay maps that onto what it already knows: a payer counts when it is not in the seller's payment loop, is not classed seller-funded or shared-funder, and its first transaction on Celo (from the funding trace) is older than the window. A payer whose funding has not been traced yet is reported as unknown, never guessed. `GET /v1/independent/:address` gives the list with reasons and each payer's volume inside the window; the same numbers appear on every report. Assay applies the rule to its own PayTo address on `/stats`.
+
 ## Reviews
 
 Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback file names a settlement Assay finds onchain from the reviewer to the agent's owner or wallet; **paid customer** when the reviewer paid the agent before writing it; **never paid it** otherwise.

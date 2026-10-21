@@ -58,3 +58,10 @@
 - The attester key only signs; it never sends transactions and can be rotated in `AssayRegistry` without touching published scores.
 - The operator CLI refuses to continue if a transaction it sent does not carry the attribution tag.
 - Paid calls Assay makes to other services are capped per day and refuse any challenge priced above the quote.
+
+## Claims, badges and alerts
+
+- **Claims** (`apps/server/src/claims.ts`, message in `packages/core/src/claim.ts`): a wallet signs a plain EIP-191 message naming its page; the API recovers the signer (viem `verifyMessage`, with the chain's `verifyMessage` as the fallback for smart wallets) and stores name, website, X handle and logo link in `claims`. Claims are valid for ten minutes from `issuedAt`, so a captured signature cannot be replayed later. Reserved words and private links are refused in `validateClaim`, which the site also runs before asking for a signature.
+- **Badges** (`apps/server/src/api/badge.ts`): an SVG built from the assessment, cached for five minutes.
+- **Alerts** (`apps/server/src/alerts.ts`): `watches` and `watch_deliveries`. Every two minutes `Watches.tick` compares each live watch's stored state (rating, score, verdict, critical codes, X warnings) with the current assessment, queues one delivery per change, and sends due deliveries with HMAC-SHA256 signatures. Hosts are resolved at each delivery and private addresses refused; redirects are not followed; retries back off up to twelve hours; a watch is disabled after twenty failed deliveries. A watch is bought over x402 (`POST /v1/watch`, $0.05 for thirty days); a validation failure answers 400, which cancels the settlement.
+- **Celo Agent Visa** (`apps/server/src/enrich/enricher.ts`): read with the Self proof through one multicall (`getTier(agentId)`) and stored in `humans.visa_tier`. Shown on reports and agent pages; never part of a score.

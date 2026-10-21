@@ -76,6 +76,25 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
   );
 
   server.registerTool(
+    "assay_independent_payers",
+    {
+      title: "Independent payers, by the hackathon's rule",
+      description:
+        "For a Celo seller address: which payers count as independent users under the Agents on Open Rails rule (not the seller or its loop, not funded by the seller or its funder, active on Celo before the window), with reasons per payer and volume inside the window.",
+      inputSchema: { address },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ address: a }) => {
+      try {
+        const r = await assay.independent(a, { limit: 50 });
+        return ok({ rule: r.rule, window: r.window, totals: r.totals, payers: r.rows });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
     "assay_find_agents",
     {
       title: "Find ERC-8004 agents on Celo",

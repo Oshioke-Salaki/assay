@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createPublicClient, fallback, http, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
+import { Watches } from "./alerts.js";
 import { Analysis } from "./analysis.js";
 import type { IndexStatus } from "./api/app.js";
 import { Attester } from "./attest.js";
@@ -34,6 +35,7 @@ export interface Runtime {
   runWorkers: (signal: AbortSignal) => Promise<void>;
   usage: Usage;
   xmentions: XMentionsWatcher | null;
+  watches: Watches | null;
   close: () => void;
 }
 
@@ -146,6 +148,12 @@ export function createRuntime(env: Env): Runtime {
         })
       : null;
 
+  // Rating-change alerts, offered wherever payments are (a watch is bought over x402).
+  const watches =
+    env.X402_API_KEY && env.PAY_TO
+      ? new Watches(db, analysis, { publicUrl: env.PUBLIC_URL, webUrl: env.WEB_URL })
+      : null;
+
   // Keeps the paid-call ledger equal to the chain: every payment from Assay's wallet to buy.
   const reconcileLoop = async (signal: AbortSignal) => {
     if (!env.BUY_PAYER_KEY) return;
@@ -184,6 +192,7 @@ export function createRuntime(env: Env): Runtime {
       env.X_MENTIONS_DAILY_CAP_USD > 0
         ? xmentions?.run(signal).catch((err) => log.error("x mentions stopped", { error: String(err) }))
         : undefined,
+      watches?.run(signal).catch((err) => log.error("alerts stopped", { error: String(err) })),
       reconcileLoop(signal),
     ]);
   };
@@ -200,6 +209,7 @@ export function createRuntime(env: Env): Runtime {
     runWorkers,
     usage,
     xmentions,
+    watches,
     close: () => {
       usage.flush();
       db.close();

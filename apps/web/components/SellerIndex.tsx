@@ -45,7 +45,7 @@ export function SellerIndex({ rows }: { rows: SellerRow[] }) {
               onBlur={() => setActive(null)}
             >
               <span className={styles.name}>
-                {r.agentIds[0] ? `Agent #${r.agentIds[0]}` : short(r.address)}
+                {r.name ?? (r.agentIds[0] ? `Agent #${r.agentIds[0]}` : short(r.address))}
               </span>
               <span className={styles.figure}>{usd(r.organicUsd)}</span>
               <span className={styles.meta}>

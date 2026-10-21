@@ -288,6 +288,9 @@ export default async function StatsPage() {
               <dt>Independent payers</dt>
               <dd>
                 {int(s.self.organicPayers)} <span className={styles.muted}>of {int(s.self.payers)}</span>
+                {s.self.independent !== undefined ? (
+                  <span className={styles.muted}> · {int(s.self.independent)} by the hackathon's rule</span>
+                ) : null}
               </dd>
               <dt>Why</dt>
               <dd>{s.self.reasons.join(" · ")}</dd>

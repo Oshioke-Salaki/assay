@@ -13,6 +13,7 @@ export const PRICES = {
   check: 2_000n, // $0.002
   checkX: 10_000n, // $0.01: a check plus an X search run now, bought from buy for this buyer
   attest: 10_000n, // $0.01
+  watch: 50_000n, // $0.05: thirty days of rating-change alerts for one address
 } as const;
 
 /**
@@ -36,7 +37,12 @@ const PAY_TOKENS = PAY_ORDER.map((s) => TOKENS.find((t) => t.symbol === s)).filt
   (t): t is TokenInfo => t !== undefined,
 );
 
-export const PAID_ROUTES = ["/v1/check/:address", "/v1/check/:address/x", "/v1/attest/:address"] as const;
+export const PAID_ROUTES = [
+  "/v1/check/:address",
+  "/v1/check/:address/x",
+  "/v1/attest/:address",
+  "/v1/watch",
+] as const;
 
 /**
  * A dollar price in a wFIAT token's raw units, rounded up to two significant figures of the fiat
@@ -91,7 +97,32 @@ const addressParam = {
   },
 };
 
-export function routesConfig(payTo: `0x${string}`, fx?: FxRates, opts: { xOnDemand?: boolean } = {}) {
+export function routesConfig(
+  payTo: `0x${string}`,
+  fx?: FxRates,
+  opts: { xOnDemand?: boolean; watch?: boolean } = {},
+) {
+  const watch = opts.watch
+    ? {
+        "POST /v1/watch": {
+          accepts: accepts(payTo, PRICES.watch, fx),
+          description:
+            'Watch a Celo address for thirty days: Assay POSTs a signed webhook when its rating or pre-payment verdict changes, a critical finding appears, or posts with warning words name it on X. Body: {"address": "0x…", "url": "https://…"}.',
+          mimeType: "application/json",
+          extensions: {
+            ...declareEip2612GasSponsoringExtension(),
+            ...declareDiscoveryExtension({
+              bodyType: "json",
+              input: {
+                address: "0x0d74d5cefd2e7f24e623330ebe3d8d4cb45ffb48",
+                url: "https://example.com/assay-webhook",
+              },
+              output: { example: { id: "w_1a2b3c4d5e6f7a8b", expiresAt: 1764000000, renewed: false } },
+            }),
+          },
+        },
+      }
+    : {};
   const checkX = opts.xOnDemand
     ? {
         "GET /v1/check/:address/x": {
@@ -117,6 +148,7 @@ export function routesConfig(payTo: `0x${string}`, fx?: FxRates, opts: { xOnDema
       }
     : {};
   return {
+    ...watch,
     ...checkX,
     "GET /v1/check/:address": {
       accepts: accepts(payTo, PRICES.check, fx),
@@ -159,11 +191,14 @@ export function routesConfig(payTo: `0x${string}`, fx?: FxRates, opts: { xOnDema
  */
 export function paidMiddleware(
   env: Env,
-  opts: { syncOnStart?: boolean; fx?: FxRates; xOnDemand?: boolean } = {},
+  opts: { syncOnStart?: boolean; fx?: FxRates; xOnDemand?: boolean; watch?: boolean } = {},
 ): MiddlewareHandler {
   if (!env.X402_API_KEY || !env.PAY_TO) {
     return async (c, next) => {
-      if (/^\/v1\/(check|attest)\//.test(c.req.path)) {
+      if (
+        /^\/v1\/(check|attest)\//.test(c.req.path) ||
+        (c.req.path === "/v1/watch" && c.req.method === "POST")
+      ) {
         return c.json(
           {
             error: "payments_not_configured",
@@ -187,7 +222,10 @@ export function paidMiddleware(
     .register(CAIP2_CELO as `${string}:${string}`, new ExactEvmScheme())
     .registerExtension(bazaarResourceServerExtension);
   return paymentMiddleware(
-    routesConfig(env.PAY_TO, opts.fx, { xOnDemand: opts.xOnDemand }) as unknown as RoutesConfig,
+    routesConfig(env.PAY_TO, opts.fx, {
+      xOnDemand: opts.xOnDemand,
+      watch: opts.watch,
+    }) as unknown as RoutesConfig,
     server,
     undefined,
     undefined,

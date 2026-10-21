@@ -16,6 +16,6 @@ import { registerTools } from "./tools.js";
 
 const baseUrl = process.env.ASSAY_URL || DEFAULT_BASE_URL;
 
-const server = new McpServer({ name: "assay", version: "0.2.0" });
+const server = new McpServer({ name: "assay", version: "0.3.0" });
 registerTools(server, createAssay({ baseUrl }), { paid: false });
 await server.connect(new StdioServerTransport());

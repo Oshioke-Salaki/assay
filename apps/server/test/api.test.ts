@@ -1,8 +1,9 @@
 import { dayOf, tokenByAddress } from "assayscore-core";
 import type { PublicClient } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Watches } from "../src/alerts.js";
 import { Analysis } from "../src/analysis.js";
-import { checkWithX, createApp } from "../src/api/app.js";
+import { checkWithX, createApp, createWatch } from "../src/api/app.js";
 import { fiatUnits } from "../src/api/paid.js";
 import { Attester } from "../src/attest.js";
 import type { DB } from "../src/db.js";
@@ -601,5 +602,258 @@ describe("paid check with a fresh X search", () => {
     );
     expect(down.status).toBe(502);
     expect(down.body.message).toMatch(/503.*Nothing was charged/);
+  });
+});
+
+describe("claimed pages, badges and independent payers", () => {
+  const KEY = `0x${"77".repeat(32)}` as const;
+
+  async function signed(over: Record<string, unknown> = {}, now = Math.floor(Date.now() / 1000)) {
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const { claimMessage } = await import("assayscore-core");
+    const account = privateKeyToAccount(KEY);
+    const fields = {
+      address: account.address.toLowerCase() as `0x${string}`,
+      action: "claim" as const,
+      name: "Weather Oracle",
+      url: "https://weather.example",
+      x: "weatheroracle",
+      logoUrl: "",
+      issuedAt: now,
+      nonce: "0123456789abcdef",
+      ...over,
+    };
+    const signature = await account.signMessage({ message: claimMessage(fields) });
+    return { body: { ...fields, signature }, address: fields.address };
+  }
+  const post = (app: ReturnType<typeof build>["app"], body: unknown) =>
+    app.request("/v1/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("lets a wallet claim its page with a signature, shows it, and lets it release it", async () => {
+    const { app } = build();
+    const { body, address } = await signed();
+    const res = await post(app, body);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      claim: { name: "Weather Oracle", x: "weatheroracle", url: "https://weather.example" },
+    });
+    const report = (await (await get(app, `/v1/address/${address}`)).json()) as {
+      claim: { name: string } | null;
+    };
+    expect(report.claim?.name).toBe("Weather Oracle");
+
+    const again = await signed({ name: "Weather Oracle v2", nonce: "fedcba9876543210" });
+    expect((await post(app, again.body)).status).toBe(200);
+    expect(
+      ((await (await get(app, `/v1/address/${address}`)).json()) as { claim: { name: string } }).claim.name,
+    ).toBe("Weather Oracle v2");
+
+    const release = await signed({ action: "release", name: "", url: "", x: "", nonce: "aaaaaaaaaaaaaaaa" });
+    expect(await (await post(app, release.body)).json()).toEqual({ released: true });
+    expect(
+      ((await (await get(app, `/v1/address/${address}`)).json()) as { claim: unknown }).claim,
+    ).toBeNull();
+  });
+
+  it("refuses a wrong signature, a stale claim, a reserved name and bad JSON", async () => {
+    const { app } = build();
+    const { body } = await signed();
+    const forged = { ...body, name: "Weather Oracle but better" };
+    const bad = await post(app, forged);
+    expect(bad.status).toBe(401);
+    expect(((await bad.json()) as { message: string }).message).toMatch(/signature does not match/);
+    const stale = await signed({}, Math.floor(Date.now() / 1000) - 3600);
+    expect((await post(app, stale.body)).status).toBe(400);
+    const reserved = await signed({ name: "Celo Weather" });
+    expect(((await (await post(app, reserved.body)).json()) as { message: string }).message).toMatch(
+      /someone else's/,
+    );
+    expect((await app.request("/v1/claim", { method: "POST", body: "nope" })).status).toBe(400);
+  });
+
+  it("shows claimed names in seller lists", async () => {
+    const { app, db } = build();
+    db.prepare(
+      "INSERT INTO claims (address, name, url, logo_url, x, signature, issued_at, updated_at) VALUES (?, 'Shop One', NULL, NULL, NULL, '0x00', 1, 1)",
+    ).run(SHOP);
+    const res = (await (await get(app, "/v1/sellers?sort=gross&limit=50")).json()) as {
+      rows: { address: string; name?: string }[];
+    };
+    expect(res.rows.find((r) => r.address === SHOP)?.name).toBe("Shop One");
+  });
+
+  it("serves a badge as cacheable SVG, with the text escaped and bad addresses refused", async () => {
+    const { app } = build();
+    const res = await get(app, `/v1/badge/${SHOP}.svg`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/image\/svg\+xml/);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    const svg = await res.text();
+    expect(svg.startsWith("<svg")).toBe(true);
+    expect(svg).toContain(">Assay<");
+    expect(svg).toMatch(/fine<|not rated yet<|no x402 revenue</);
+    expect(svg).not.toContain("<script");
+    expect((await get(app, "/v1/badge/nope.svg")).status).toBe(400);
+    const unknown = await get(app, `/v1/badge/0x${"e".repeat(40)}`);
+    expect(await unknown.text()).toContain("no x402 revenue");
+  });
+
+  it("reports which payers count as independent, by the hackathon's rule, with window volume", async () => {
+    const { app } = build();
+    const res = await get(app, `/v1/independent/${SHOP}`);
+    expect(res.status).toBe(200);
+    const r = (await res.json()) as {
+      rule: string;
+      window: { from: number; to: number };
+      totals: { payers: number; independent: number; notIndependent: number; unknown: number };
+      rows: { payer: string; independent: boolean | null; reasons: string[]; inWindow: { usd: number } }[];
+    };
+    expect(r.rule).toMatch(/independent when/);
+    expect(r.window.from).toBeLessThan(r.window.to);
+    expect(r.totals.payers).toBe(r.rows.length);
+    expect(r.totals.independent + r.totals.notIndependent + r.totals.unknown).toBe(r.totals.payers);
+    for (const row of r.rows)
+      expect(row.independent === true ? row.reasons.length === 0 : row.reasons.length > 0).toBe(true);
+    const custom = (await (
+      await get(app, `/v1/independent/${SHOP}?from=1700000000&to=1700086400&limit=1`)
+    ).json()) as {
+      window: { from: number; to: number };
+      rows: unknown[];
+    };
+    expect(custom.window).toEqual({ from: 1_700_000_000, to: 1_700_086_400 });
+    expect(custom.rows.length).toBeLessThanOrEqual(1);
+    expect((await get(app, "/v1/independent/nope")).status).toBe(400);
+  });
+});
+
+describe("alerts over x402", () => {
+  const supported = {
+    kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:42220" }],
+    extensions: [],
+    signers: { "eip155:42220": ["0x0d74D5Cefd2e7F24E623330ebE3d8D4cB45fFB48"] },
+  };
+  function withWatches(on: boolean, overrides: Record<string, string> = {}) {
+    const env = testEnv({ CORS_ORIGINS: "https://assay.example", FREE_RATE_PER_MIN: "1000", ...overrides });
+    const db = memoryDb();
+    seed(db);
+    const analysis = new Analysis(db, 0);
+    const watches = on
+      ? new Watches(db, analysis, {
+          fetchImpl: (async () => new Response("", { status: 200 })) as unknown as typeof fetch,
+          lookup: async () => [{ address: "93.184.216.34" }],
+        })
+      : null;
+    const deps = {
+      env,
+      db,
+      analysis,
+      fx: fixedFx(db),
+      rpc: {} as PublicClient,
+      attester: null,
+      status: () => ({
+        settlementsBlock: 100,
+        registryBlock: 100,
+        finalizedHead: 120,
+        lastSettlementTs: null,
+      }),
+      syncFacilitatorOnStart: true,
+      watches,
+    };
+    return { app: createApp(deps), deps };
+  }
+  const post = (app: ReturnType<typeof build>["app"], body: unknown) =>
+    app.request("/v1/watch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("prices a watch at $0.05 only when alerts are offered", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.endsWith("/supported")) return new Response(JSON.stringify(supported), { status: 200 });
+        return new Response("{}", { status: 404 });
+      }),
+    );
+    const paid = { X402_API_KEY: "test-key-123", PAY_TO: `0x${"a".repeat(40)}` };
+    const { app } = withWatches(true, paid);
+    const res = await post(app, { address: SHOP, url: "https://hooks.example/a" });
+    expect(res.status).toBe(402);
+    const required = JSON.parse(
+      Buffer.from(res.headers.get("payment-required")!, "base64").toString("utf8"),
+    ) as {
+      accepts: { amount: string }[];
+    };
+    expect(required.accepts[0]?.amount).toBe("50000");
+    expect(
+      ((await (await get(app, "/")).json()) as { endpoints: { paid: Record<string, string> } }).endpoints
+        .paid["POST /v1/watch"],
+    ).toMatch(/\$0\.050 for 30 days/);
+    const { app: off } = withWatches(false, paid);
+    expect((await post(off, { address: SHOP, url: "https://hooks.example/a" })).status).toBe(503);
+  });
+
+  it("creates, reports and cancels a watch, refusing bad input before any payment settles", async () => {
+    const { app, deps } = withWatches(true);
+    expect(createWatch(deps, { address: "nope", url: "https://hooks.example/a" }).status).toBe(400);
+    expect(createWatch(deps, { address: SHOP, url: "http://hooks.example/a" })).toMatchObject({
+      status: 400,
+      body: { message: /https/ },
+    });
+    const made = createWatch(deps, { address: SHOP, url: "https://hooks.example/a" });
+    expect(made.status).toBe(201);
+    const { id, secret } = made.body as { id: string; secret: string };
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    const renewed = createWatch(deps, { address: SHOP, url: "https://hooks.example/a" });
+    expect(renewed.body).toMatchObject({ id, secret: null, renewed: true });
+
+    expect((await get(app, `/v1/watch/${id}`)).status).toBe(401);
+    const status = await get(app, `/v1/watch/${id}`, { "x-assay-watch-secret": secret });
+    expect(status.status).toBe(200);
+    expect(status.headers.get("cache-control")).toBe("no-store");
+    expect(
+      ((await status.json()) as { watch: { address: string }; deliveries: unknown[] }).watch.address,
+    ).toBe(SHOP);
+    expect(
+      (
+        await app.request(`/v1/watch/${id}`, {
+          method: "DELETE",
+          headers: { "x-assay-watch-secret": "wrong" },
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await app.request(`/v1/watch/${id}`, {
+          method: "DELETE",
+          headers: { "x-assay-watch-secret": secret },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await get(app, `/v1/watch/${id}`, { "x-assay-watch-secret": secret })).status).toBe(404);
+  });
+});
+
+describe("CORS for the browser's writes", () => {
+  it("lets the site POST a claim and DELETE a watch", async () => {
+    const { app } = build();
+    const res = await app.request("/v1/claim", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://assay.example",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://assay.example");
+    expect(res.headers.get("access-control-allow-methods")).toMatch(/POST/);
+    expect(res.headers.get("access-control-allow-methods")).toMatch(/DELETE/);
   });
 });

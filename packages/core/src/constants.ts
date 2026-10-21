@@ -72,6 +72,10 @@ export function tokenByAddress(address: string): TokenInfo | undefined {
 
 export const EIP3009_TOKENS = TOKENS.filter((t) => t.transfer === "eip3009").map((t) => t.address);
 
+/** Self's Celo Agent Visa: a soulbound tier per Self agent id (0 none, 1 Tourist, 2 Work, 3 Citizenship). */
+export const CELO_AGENT_VISA: Address = "0xca97f7586cf9de62b8ca516d7ee25f6aeae5e109";
+export const VISA_TIERS = ["none", "Tourist visa", "Work visa", "Citizenship"] as const;
+
 /** x402's Permit2 proxy. wFIAT settlements are calls to this contract. */
 export const X402_PERMIT2_PROXY: Address = "0x402085c248eea27d92e8b30b2c58ed07f9e20001";
 

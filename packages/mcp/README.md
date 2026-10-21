@@ -29,6 +29,7 @@ All tools are read-only and free. The server never holds a wallet.
 | Tool | What it answers |
 | --- | --- |
 | `assay_check_seller` | pass, caution or block for a Celo address, with rating, organic revenue share, reasons and what X says. Call it before paying an unfamiliar x402 seller. With a paying client, `fresh_x: true` buys an X search for the address on the spot ($0.01). |
+| `assay_independent_payers` | which of a seller's payers count as independent users by the hackathon's rule, with reasons and volume in the window. |
 | `assay_report` | the full report: organic and circular revenue, payers, payment loops, funding, identity. |
 | `assay_find_agents` | ERC-8004 agents on Celo, searchable, with payment-verified review counts. |
 | `assay_economy` | totals for the whole Celo x402 economy. |

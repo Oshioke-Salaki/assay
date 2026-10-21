@@ -1,4 +1,4 @@
-import { verdictFor } from "assayscore-core";
+import { VISA_TIERS, verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -133,6 +133,18 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
               <span className={styles.dash}>no proof</span>
             )}
           </dd>
+          {a.identity.human ? (
+            <>
+              <dt>Celo Agent Visa</dt>
+              <dd>
+                {a.identity.human.visaTier ? (
+                  VISA_TIERS[a.identity.human.visaTier]
+                ) : (
+                  <span className={styles.dash}>none yet</span>
+                )}
+              </dd>
+            </>
+          ) : null}
         </dl>
         {agent.description ? (
           <p className={styles.muted} style={{ marginTop: 12 }}>

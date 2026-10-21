@@ -1,4 +1,10 @@
-import { type Address, SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "assayscore-core";
+import {
+  type Address,
+  CELO_AGENT_VISA,
+  celoAgentVisaAbi,
+  SELF_AGENT_REGISTRY,
+  selfAgentRegistryAbi,
+} from "assayscore-core";
 import { type PublicClient, pad } from "viem";
 import type { DB } from "../db.js";
 import type { BlockSource } from "../indexer/sqd.js";
@@ -174,31 +180,44 @@ export class Enricher {
               functionName: "getHumanNullifier" as const,
               args: [f.id] as const,
             },
+            // The Celo Agent Visa is keyed by the same Self agent id. Shown on pages, never scored.
+            {
+              address: CELO_AGENT_VISA,
+              abi: celoAgentVisaAbi,
+              functionName: "getTier" as const,
+              args: [f.id] as const,
+            },
           ]),
         })
       : [];
-    const byAddress = new Map<string, { agentId: string; nullifier: string; fresh: boolean }>();
+    const PER = 4;
+    const byAddress = new Map<
+      string,
+      { agentId: string; nullifier: string; fresh: boolean; visaTier: number }
+    >();
     found.forEach((f, i) => {
-      const has = details[i * 3];
-      const fresh = details[i * 3 + 1];
-      const nullifier = details[i * 3 + 2];
+      const has = details[i * PER];
+      const fresh = details[i * PER + 1];
+      const nullifier = details[i * PER + 2];
+      const tier = details[i * PER + 3];
       if (has?.status === "success" && has.result === true && nullifier?.status === "success") {
         byAddress.set(f.address, {
           agentId: f.id.toString(),
           nullifier: (nullifier.result as bigint).toString(),
           fresh: fresh?.status === "success" && fresh.result === true,
+          visaTier: tier?.status === "success" ? Math.min(3, Math.max(0, Number(tier.result))) : 0,
         });
       }
     });
     const upsert = this.db.prepare(
-      `INSERT INTO humans (address, agent_id, nullifier, fresh, fetched_at) VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO humans (address, agent_id, nullifier, fresh, visa_tier, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (address) DO UPDATE SET agent_id = excluded.agent_id, nullifier = excluded.nullifier,
-         fresh = excluded.fresh, fetched_at = excluded.fetched_at`,
+         fresh = excluded.fresh, visa_tier = excluded.visa_tier, fetched_at = excluded.fetched_at`,
     );
     this.db.transaction(() => {
       for (const a of addresses) {
         const h = byAddress.get(a);
-        upsert.run(a, h?.agentId ?? null, h?.nullifier ?? null, h?.fresh ? 1 : 0, nowSec());
+        upsert.run(a, h?.agentId ?? null, h?.nullifier ?? null, h?.fresh ? 1 : 0, h?.visaTier ?? 0, nowSec());
       }
     })();
     if (byAddress.size > 0) this.markDirty();

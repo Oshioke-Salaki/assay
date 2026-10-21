@@ -3,6 +3,8 @@ import {
   type Address,
   type Assessment,
   ERC8004_IDENTITY_REGISTRY,
+  HACKATHON_WINDOW,
+  independentPayers,
   isAddress,
   isTxHash,
   KNOWN_FACILITATORS,
@@ -18,8 +20,10 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import type { Hash, PublicClient } from "viem";
+import { WATCH_DAYS, type Watches } from "../alerts.js";
 import type { Analysis } from "../analysis.js";
 import type { Attester } from "../attest.js";
+import { applyClaim, readClaim, readClaimNames } from "../claims.js";
 import type { DB } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
 import {
@@ -36,6 +40,8 @@ import { BudgetExceeded } from "../lib/buy.js";
 import { log } from "../lib/log.js";
 import { proveSettlement } from "../proof.js";
 import { classify, type Usage } from "../usage.js";
+import { badgeSvg } from "./badge.js";
+import { independentReport } from "./independent.js";
 import { PRICES, paidMiddleware } from "./paid.js";
 import { adminStats, publicStats, selfView } from "./stats.js";
 
@@ -60,6 +66,8 @@ export interface AppDeps {
   usage?: Usage | null;
   /** What X says, with searches bought on demand for paying buyers when configured. */
   xmentions?: XMentionsWatcher | null;
+  /** Rating-change alerts, when configured. */
+  watches?: Watches | null;
 }
 
 const LIST_LIMIT = 100;
@@ -101,7 +109,7 @@ export function createApp(deps: AppDeps): Hono {
     "*",
     cors({
       origin: (origin) => (origins.includes("*") || origins.includes(origin) ? origin : null),
-      allowMethods: ["GET", "OPTIONS"],
+      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
       // x402 browser clients send access-control-expose-headers on their paid retry; refusing it
       // fails the preflight and the payment looks like a network error.
       allowHeaders: [
@@ -119,9 +127,15 @@ export function createApp(deps: AppDeps): Hono {
   app.use("/v1/check/*", validateAddressParam);
   app.use("/v1/attest/*", validateAddressParam);
   const xOnDemand = Boolean(deps.xmentions?.onDemand);
+  const watchOffered = Boolean(deps.watches);
   app.use(
     "*",
-    paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true, fx: deps.fx, xOnDemand }),
+    paidMiddleware(env, {
+      syncOnStart: deps.syncFacilitatorOnStart ?? true,
+      fx: deps.fx,
+      xOnDemand,
+      watch: watchOffered,
+    }),
   );
 
   const free = rateLimit(env.FREE_RATE_PER_MIN, env.INTERNAL_API_KEY);
@@ -141,7 +155,9 @@ export function createApp(deps: AppDeps): Hono {
       log.warn("x mentions queue failed", { address, error: String(err) });
     }
   };
-  const cached = snapshotCache(() => analysis.current().builtAt, 4_000);
+  // Cached answers change with the analysis snapshot, and with every claim (names on reports).
+  let claimsVersion = 0;
+  const cached = snapshotCache(() => analysis.current().builtAt + claimsVersion, 4_000);
 
   app.get("/", (c) =>
     c.json({
@@ -166,6 +182,7 @@ export function createApp(deps: AppDeps): Hono {
           "/v1/check/:address": usd(PRICES.check),
           ...(xOnDemand ? { "/v1/check/:address/x": usd(PRICES.checkX) } : {}),
           "/v1/attest/:address": usd(PRICES.attest),
+          ...(watchOffered ? { "POST /v1/watch": `${usd(PRICES.watch)} for ${WATCH_DAYS} days` } : {}),
         },
       },
     }),
@@ -245,7 +262,13 @@ export function createApp(deps: AppDeps): Hono {
     let rows = analysis.current().summary.sellersRanked;
     if (rating) rows = rows.filter((r) => r.rating === rating);
     if (sort === "gross") rows = [...rows].sort((a, b) => b.grossUsd - a.grossUsd);
-    return c.json({ total: rows.length, rows: rows.slice(offset, offset + limit) });
+    const names = readClaimNames(deps.db);
+    return c.json({
+      total: rows.length,
+      rows: rows
+        .slice(offset, offset + limit)
+        .map((r) => (names.has(r.address) ? { ...r, name: names.get(r.address) } : r)),
+    });
   });
 
   app.get("/v1/address/:address", free, cached, (c) => {
@@ -261,7 +284,51 @@ export function createApp(deps: AppDeps): Hono {
       check: withX(verdictFor(a), x),
       agents: analysis.agentsFor(address),
       x,
+      claim: readClaim(deps.db, address),
     });
+  });
+
+  /**
+   * Which of a seller's payers count as independent users by the hackathon's published rule,
+   * with their volume inside the window. Free, so any team can check its own numbers.
+   */
+  app.get("/v1/independent/:address", free, cached, (c) => {
+    const raw = c.req.param("address");
+    if (!isAddress(raw)) return badAddress(c);
+    const from = clampInt(c.req.query("from"), 1_600_000_000, 4_000_000_000, HACKATHON_WINDOW.start);
+    const to = clampInt(c.req.query("to"), from, 4_000_000_000, HACKATHON_WINDOW.end);
+    const limit = clampInt(c.req.query("limit"), 1, 500, 200);
+    return c.json(independentReport(deps.db, analysis.assess(normalizeAddress(raw)), { from, to, limit }));
+  });
+
+  /** A badge for READMEs: the rating and fineness in the verdict's colour. */
+  app.get("/v1/badge/:address", free, (c) => {
+    const raw = c.req.param("address").replace(/\.svg$/i, "");
+    if (!isAddress(raw)) return badAddress(c);
+    c.header("content-type", "image/svg+xml; charset=utf-8");
+    c.header("cache-control", "public, max-age=300");
+    return c.body(badgeSvg(analysis.assess(normalizeAddress(raw))));
+  });
+
+  /**
+   * A seller claims its page by signing a message from its wallet: a name, a website, an X
+   * handle and a logo. The same message signed with action "release" removes the claim.
+   */
+  app.post("/v1/claim", free, async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "bad_request", message: "Send the claim as JSON." }, 400);
+    }
+    const out = await applyClaim(deps.db, body, { rpc: deps.rpc });
+    if (!out.ok)
+      return c.json(
+        { error: out.status === 401 ? "bad_signature" : "bad_request", message: out.error },
+        out.status,
+      );
+    claimsVersion++;
+    return c.json(out.action === "release" ? { released: true } : { claim: out.claim });
   });
 
   /** One page of who paid an address, searchable by address and filterable by class. */
@@ -393,6 +460,40 @@ export function createApp(deps: AppDeps): Hono {
     return c.json(out.body, out.status);
   });
 
+  /**
+   * Thirty days of alerts for one address, paid once. Validation failures answer 400, which
+   * cancels the x402 settlement.
+   */
+  app.post("/v1/watch", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(await c.req.text()) as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "bad_request", message: "Send JSON with address and url." }, 400);
+    }
+    const out = createWatch(deps, body);
+    return c.json(out.body, out.status);
+  });
+
+  app.get("/v1/watch/:id", free, (c) => {
+    if (!deps.watches) return c.json({ error: "not_offered", message: "Alerts are not offered here." }, 503);
+    const s = deps.watches.status(c.req.param("id"), c.req.header("x-assay-watch-secret"));
+    if (s.kind === "missing") return c.json({ error: "not_found", message: "No such watch." }, 404);
+    if (s.kind === "forbidden")
+      return c.json({ error: "forbidden", message: "Send the watch secret in x-assay-watch-secret." }, 401);
+    c.header("cache-control", "no-store");
+    return c.json({ watch: s.watch, deliveries: s.deliveries });
+  });
+
+  app.delete("/v1/watch/:id", free, (c) => {
+    if (!deps.watches) return c.json({ error: "not_offered", message: "Alerts are not offered here." }, 503);
+    const r = deps.watches.cancel(c.req.param("id"), c.req.header("x-assay-watch-secret"));
+    if (r === "missing") return c.json({ error: "not_found", message: "No such watch." }, 404);
+    if (r === "forbidden")
+      return c.json({ error: "forbidden", message: "Send the watch secret in x-assay-watch-secret." }, 401);
+    return c.body(null, 204);
+  });
+
   app.get("/v1/attest/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
     const a = analysis.assess(address);
@@ -411,6 +512,11 @@ export function createApp(deps: AppDeps): Hono {
 
   /** Proof of payment for every call Assay paid a service it does not own (buy track). */
   /** Public numbers about Assay itself: usage, revenue at its PayTo, spend, data freshness. */
+  /** Assay's own address by its own rules, plus its independent payers by the hackathon's rule. */
+  const selfOf = (payTo: Address) => {
+    const a = analysis.assess(payTo);
+    return { ...selfView(a), independent: independentPayers(a).totals.independent };
+  };
   let statsCache: { at: number; body: unknown } | null = null;
   app.get("/v1/stats", free, (c) => {
     const now = Date.now();
@@ -420,7 +526,7 @@ export function createApp(deps: AppDeps): Hono {
         body: {
           ...publicStats(deps.db, env, deps.usage ?? null, deps.status(), now),
           // Assay rated by its own rules: the honest count of its independent customers.
-          self: env.PAY_TO ? selfView(analysis.assess(env.PAY_TO.toLowerCase() as Address)) : null,
+          self: env.PAY_TO ? selfOf(env.PAY_TO.toLowerCase() as Address) : null,
         },
       };
     c.header("cache-control", "public, max-age=30");
@@ -479,6 +585,7 @@ export function createApp(deps: AppDeps): Hono {
         check: usd(PRICES.check),
         ...(xOnDemand ? { checkX: usd(PRICES.checkX) } : {}),
         attest: usd(PRICES.attest),
+        ...(watchOffered ? { watch: usd(PRICES.watch) } : {}),
       },
     }),
   );
@@ -523,6 +630,41 @@ const validateAddressParam: MiddlewareHandler = async (c, next) => {
   if (!isAddress(subject)) return badAddress(c);
   await next();
 };
+
+/** The answer to a paid request to watch an address. Anything but 201 cancels the settlement. */
+export function createWatch(
+  deps: Pick<AppDeps, "watches">,
+  body: Record<string, unknown>,
+): { status: 201 | 400 | 429 | 503; body: Record<string, unknown> } {
+  if (!deps.watches)
+    return {
+      status: 503,
+      body: { error: "not_offered", message: "This Assay instance does not offer alerts." },
+    };
+  const address = String(body.address ?? "");
+  if (!isAddress(address))
+    return {
+      status: 400,
+      body: { error: "bad_address", message: "Expected a 0x-prefixed 20-byte address." },
+    };
+  const url = String(body.url ?? "").trim();
+  const out = deps.watches.create(normalizeAddress(address), url);
+  if (!out.ok) return { status: out.status, body: { error: "bad_request", message: out.error } };
+  return {
+    status: 201,
+    body: {
+      id: out.id,
+      secret: out.secret,
+      address: normalizeAddress(address),
+      url,
+      expiresAt: out.expiresAt,
+      renewed: out.renewed,
+      note: out.renewed
+        ? `Extended by ${WATCH_DAYS} days. The secret was shown when the watch was created.`
+        : "Keep the secret: deliveries are signed with it (x-assay-signature), and it manages the watch. A first delivery, watch.started, is on its way.",
+    },
+  };
+}
 
 /**
  * The answer to a paid check with a fresh X search. Any status other than 200 cancels the x402

@@ -9,6 +9,7 @@ Base URL: `https://api.assayscore.xyz` (or wherever you deploy your own server).
 | `GET /v1/check/:address` | $0.002 | `verdict` (pass · caution · block), `rating`, `score`, `organicShare`, `reasons`, `attestation`, `x` in brief |
 | `GET /v1/check/:address/x` | $0.01 | the same check plus an X search bought now for this buyer through the buy gateway: `x` in full (every post naming the address, warnings counted) with `fresh: true` and `reused` (a search from the last 15 minutes served it). If the search cannot be bought or does not answer, 502 or 503 with `retry-after` when the day's budget is spent, and the x402 payment is **not** settled |
 | `GET /v1/attest/:address` | $0.01 | the full assessment (payer lines up to 500), `check`, linked `agents`, `attestation` |
+| `POST /v1/watch` | $0.05 | thirty days of alerts for one address. Body `{ "address", "url" }` (public https only). Answers 201 `{ id, secret, expiresAt, renewed }`; the secret is shown once. Paying again for the same address and URL extends the watch. 400 cancels the settlement |
 
 An unpaid request answers 402 with a `PAYMENT-REQUIRED` header listing six options in this order: USD₮ (the default), USDC, USA₮, then Ripio's wARS, wBRL and wCOP. The dollars are paid with EIP-3009. The wFIAT tokens are paid through the x402 Permit2 proxy at the day's exchange rate, rounded up to two significant figures (for $0.002: 3.1 wARS, 0.011 wBRL, 6.4 wCOP at mid-October rates). The 402 declares `eip2612GasSponsoring`, so a payer without a Permit2 approval signs an EIP-2612 permit and the facilitator submits it: no payer ever needs CELO for gas.
 
@@ -32,7 +33,11 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 
 | Route | Returns |
 | --- | --- |
-| `GET /v1/address/:address` | `assessment` (payer lines up to 100), `check`, `agents`, `x` (what X says, or `null` before the first search) |
+| `GET /v1/address/:address` | `assessment` (payer lines up to 100), `check`, `agents`, `x` (what X says, or `null` before the first search), `claim` (the name, website and X handle the wallet's owner signed, or `null`) |
+| `GET /v1/independent/:address?from=&to=&limit=200` | which payers count as independent users by the hackathon's rule (not the seller or its loop, not funded by the seller or its funder, active on Celo before the window), each with reasons and volume inside the window; `totals` and the `rule` in words. Default window: the hackathon's |
+| `GET /v1/badge/:address.svg` | an SVG badge with the rating and fineness in the verdict's colour; `cache-control: public, max-age=300` |
+| `POST /v1/claim` | a signed claim: `{ address, action: "claim" \| "release", name, url, x, logoUrl, issuedAt, nonce, signature }` where `signature` is the wallet's EIP-191 signature of `claimMessage(fields)` from `assayscore-core`. Valid for ten minutes; 401 when the signature does not recover to the address; 400 with a plain reason for bad names (reserved words, length, characters) or links (https and public hosts only) |
+| `GET /v1/watch/:id` · `DELETE /v1/watch/:id` | status (with the last ten deliveries) and cancellation of a watch; the secret goes in `x-assay-watch-secret` |
 | `GET /v1/address/:address/payers?limit=20&offset=0&q=&class=` | one page of who paid it, searchable, filterable by class, with counts |
 | `GET /v1/address/:address/counterparties?limit=20&offset=0&q=&loop=1` | one page of who it paid |
 | `GET /v1/economy` | totals: gross, organic, loop offset, self-funded, settlements, sellers, payers, loops, rating counts, review stats, top sellers |
@@ -54,6 +59,12 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 ### Operator
 
 `GET /v1/admin` with `Authorization: Bearer <ADMIN_KEY>` returns the agent wallet's and PayTo's balances (CELO, USDC, USD₮, USA₮), today's spend against each daily cap, the X queue, the last 20 paid calls including failures, the last 50 warnings and errors since restart, and the database and process. It answers 404 when `ADMIN_KEY` is not set, 401 for a missing or wrong key, and 429 for 15 minutes after five wrong keys from one IP. It is never cached, and every URL in the log lines it returns is cut to its origin so an RPC key in a path never reaches the browser. The page at [assayscore.xyz/admin](https://assayscore.xyz/admin) asks for the key, keeps it in that tab's session storage only, and refreshes every 30 seconds.
+
+## Alerts (webhooks)
+
+A watch delivers a JSON POST for `watch.started` (right away, so the receiver can confirm the pipe), `rating.changed`, `verdict.changed`, `finding.critical` (a new critical finding code) and `x.warnings` (posts with warning words appeared on X). The body is `{ id, event, watch, address, at, detail, previous, current, report, api }`, where `previous` and `current` are `{ rating, score, verdict, critical[], xWarnings }`. Headers: `x-assay-event`, `x-assay-delivery`, `x-assay-watch`, `x-assay-timestamp`, and `x-assay-signature: sha256=<hex HMAC-SHA256 over "<timestamp>.<body>" with the watch secret>`. Verify the signature and ignore anything older than a few minutes.
+
+Delivery: 10-second timeout, redirects not followed, retried after 1, 5, 30, 120 and 720 minutes, then given up. A watch whose deliveries keep failing is disabled after twenty. The receiving host is resolved at every delivery and must be public: private and loopback addresses are refused, which also covers DNS rebinding. Watches are checked every two minutes.
 
 ## What X says (`x`)
 

@@ -16,6 +16,47 @@ export interface SellerRow {
   rating: Rating;
   lastTs: number | null;
   agentIds: string[];
+  /** Name the wallet's owner claimed for its page, when it has. */
+  name?: string;
+}
+
+/** What a wallet's owner put on its page by signing a claim. */
+export interface ClaimInfo {
+  address: Address;
+  name: string;
+  url: string | null;
+  logoUrl: string | null;
+  x: string | null;
+  updatedAt: number;
+}
+
+/** Which payers count as independent users, by the hackathon's published rule. */
+export interface Independent {
+  address: Address;
+  rule: string;
+  window: { from: number; to: number };
+  totals: {
+    payers: number;
+    independent: number;
+    notIndependent: number;
+    unknown: number;
+    independentUsd: number;
+    independentInWindow: number;
+    independentUsdInWindow: number;
+    usdInWindow: number;
+  };
+  rows: {
+    payer: Address;
+    independent: boolean | null;
+    reasons: string[];
+    usd: number;
+    count: number;
+    firstPaymentTs: number;
+    firstSeenAt: number | null;
+    class: string;
+    funder: Address | null;
+    inWindow: { usd: number; count: number };
+  }[];
 }
 
 export interface Economy {
@@ -122,6 +163,7 @@ export interface AddressResponse {
   agents: AgentRow[];
   /** Absent on servers older than the X search; null when not searched yet. */
   x?: XMentions | null;
+  claim?: ClaimInfo | null;
 }
 
 export interface AgentResponse {
@@ -237,6 +279,8 @@ export interface Stats {
     fundedUsd: number;
     payers: number;
     organicPayers: number;
+    /** Independent payers by the hackathon's rule. */
+    independent?: number;
   } | null;
 }
 

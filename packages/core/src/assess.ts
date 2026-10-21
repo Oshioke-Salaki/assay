@@ -198,6 +198,8 @@ function sellerSide(ledger: Ledger, s: Address, ctx: AssessmentContext): SellerS
       funder: funding?.funder ?? null,
       human: ctx.humans.has(f.payer),
       established,
+      firstSeenAt: funding?.firstSeenAt ?? null,
+      traced: funding !== undefined,
       sampleTxs: f.sampleTxs,
     };
   });
