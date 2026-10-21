@@ -50,7 +50,7 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 
 ### Operator
 
-`GET /v1/admin` with `Authorization: Bearer <ADMIN_KEY>` returns the agent wallet's and PayTo's balances (CELO, USDC, USD₮, USA₮), today's spend against each daily cap, the X queue, the last 20 paid calls including failures, the last 50 warnings and errors since restart, and the database and process. It answers 404 when `ADMIN_KEY` is not set, 401 for a missing or wrong key, and is never cached. The page at [assayscore.xyz/admin](https://assayscore.xyz/admin) asks for the key, keeps it in that tab's session storage only, and refreshes every 30 seconds.
+`GET /v1/admin` with `Authorization: Bearer <ADMIN_KEY>` returns the agent wallet's and PayTo's balances (CELO, USDC, USD₮, USA₮), today's spend against each daily cap, the X queue, the last 20 paid calls including failures, the last 50 warnings and errors since restart, and the database and process. It answers 404 when `ADMIN_KEY` is not set, 401 for a missing or wrong key, and 429 for 15 minutes after five wrong keys from one IP. It is never cached, and every URL in the log lines it returns is cut to its origin so an RPC key in a path never reaches the browser. The page at [assayscore.xyz/admin](https://assayscore.xyz/admin) asks for the key, keeps it in that tab's session storage only, and refreshes every 30 seconds.
 
 ## What X says (`x`)
 

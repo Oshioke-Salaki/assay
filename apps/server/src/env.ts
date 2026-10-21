@@ -72,8 +72,11 @@ const schema = z.object({
    * Vercel IPs, so without this the per-IP limit would throttle every visitor at once.
    */
   INTERNAL_API_KEY: optional(z.string().min(24)),
-  /** Opens GET /v1/admin to whoever sends it as a bearer token. Unset: the admin view does not exist. */
-  ADMIN_KEY: optional(z.string().min(24)),
+  /**
+   * Opens GET /v1/admin to whoever sends it as a bearer token. Unset: the admin view does not
+   * exist. The view is read-only and wrong guesses are locked out per IP, so a short key is allowed.
+   */
+  ADMIN_KEY: optional(z.string().min(8)),
 });
 
 export type Env = z.infer<typeof schema>;

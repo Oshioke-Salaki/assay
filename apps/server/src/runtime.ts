@@ -54,8 +54,8 @@ export function createRuntime(env: Env): Runtime {
     batch: { multicall: true },
   }) as PublicClient;
   const analysis = new Analysis(db);
-  // The salt keeps caller hashes unlinkable to addresses; a key that never leaves the server.
-  const usage = new Usage(db, env.ADMIN_KEY ?? env.INTERNAL_API_KEY ?? randomBytes(32).toString("hex"));
+  // The salt keeps caller hashes unlinkable to addresses: a long random key that never leaves the server.
+  const usage = new Usage(db, env.INTERNAL_API_KEY ?? randomBytes(32).toString("hex"));
   // SQD first; if the portal is down, the same queries are served from Celo RPC for the tail.
   const rawSqd = new SqdClient(env.SQD_URL);
   const sqd = new FailoverSource(rawSqd, new RpcSource(rpc as unknown as RpcReader));

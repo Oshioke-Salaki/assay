@@ -65,6 +65,16 @@ export function AdminView() {
           setLoad({ state: "signed-out", error: "That key was not accepted." });
           return;
         }
+        if (res.status === 429) {
+          writeKey(null);
+          setKey(null);
+          last.current = null;
+          setLoad({
+            state: "signed-out",
+            error: "Too many wrong keys from this network. Try again in 15 minutes.",
+          });
+          return;
+        }
         if (res.status === 404) {
           setLoad({ state: "signed-out", error: "The operator view is not switched on for this API." });
           return;
@@ -150,7 +160,7 @@ export function AdminView() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               required
-              minLength={24}
+              minLength={8}
             />
           </label>
           {load.error ? (

@@ -87,7 +87,7 @@ A failure opens one issue labelled `uptime`; GitHub emails everyone watching the
 
 ### Operator view
 
-Set `ADMIN_KEY` (at least 24 characters; `openssl rand -hex 32`) to switch on `GET /v1/admin` and the page at `/admin`. Without it the route answers 404. To change the key, set a new one with `fly secrets set ADMIN_KEY=...`; the old one stops working when the machine restarts. Public usage and revenue numbers are at `/stats` and need no key.
+Set `ADMIN_KEY` (at least 8 characters; longer is better, `openssl rand -hex 32` gives one) to switch on `GET /v1/admin` and the page at `/admin`. Without it the route answers 404. To change the key, set a new one with `fly secrets set ADMIN_KEY=...`; the old one stops working when the machine restarts. Public usage and revenue numbers are at `/stats` and need no key.
 
 ## Publishing the packages
 

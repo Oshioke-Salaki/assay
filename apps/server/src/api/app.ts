@@ -391,13 +391,31 @@ export function createApp(deps: AppDeps): Hono {
 
   /** Operator view behind ADMIN_KEY. Without the key set, the route does not exist. */
   let adminCache: { at: number; body: unknown } | null = null;
+  // Wrong keys per IP: after ADMIN_MAX_FAILS in ADMIN_LOCK_MS, that IP gets 429 until the window ends.
+  const adminFails = new Map<string, { n: number; until: number }>();
   app.get("/v1/admin", free, async (c) => {
     if (!env.ADMIN_KEY) return c.json({ error: "not_found", message: "Not found." }, 404);
-    const given = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
     c.header("cache-control", "no-store");
-    if (!sameSecret(given, env.ADMIN_KEY))
-      return c.json({ error: "unauthorized", message: "A valid admin key is required." }, 401);
     const now = Date.now();
+    const ip = clientIp(c);
+    const fails = adminFails.get(ip);
+    if (fails && fails.until <= now) adminFails.delete(ip);
+    else if (fails && fails.n >= ADMIN_MAX_FAILS) {
+      c.header("retry-after", String(Math.ceil((fails.until - now) / 1000)));
+      return c.json({ error: "locked", message: "Too many wrong keys. Try again later." }, 429);
+    }
+    const given = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    if (!sameSecret(given, env.ADMIN_KEY)) {
+      if (given) {
+        const f = adminFails.get(ip) ?? { n: 0, until: now + ADMIN_LOCK_MS };
+        f.n++;
+        adminFails.set(ip, f);
+        if (adminFails.size > 10_000) adminFails.delete(adminFails.keys().next().value as string);
+        log.warn("admin key refused", { failures: f.n });
+      }
+      return c.json({ error: "unauthorized", message: "A valid admin key is required." }, 401);
+    }
+    adminFails.delete(ip);
     if (!adminCache || now - adminCache.at > 15_000)
       adminCache = { at: now, body: await adminStats(deps.db, env, deps.rpc, now) };
     return c.json(adminCache.body as Record<string, unknown>);
@@ -537,6 +555,9 @@ export function snapshotCache(version: () => number, maxEntries: number): Middle
  * the internal key: its page renders are not limited, but when it relays a visitor's request it
  * names the visitor in `x-assay-client-ip`, and that visitor is limited like any other.
  */
+const ADMIN_MAX_FAILS = 5;
+const ADMIN_LOCK_MS = 15 * 60_000;
+
 export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHandler {
   const hits = new Map<string, { n: number; reset: number }>();
   const trusted = (c: Context) => sameSecret(c.req.header("x-assay-internal"), internalKey);

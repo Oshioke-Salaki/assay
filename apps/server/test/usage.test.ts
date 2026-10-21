@@ -2,6 +2,7 @@ import type { PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { Analysis } from "../src/analysis.js";
 import { createApp } from "../src/api/app.js";
+import { redactUrls } from "../src/api/stats.js";
 import { classify, Usage } from "../src/usage.js";
 import { memoryDb, testEnv } from "./helpers.js";
 
@@ -223,6 +224,7 @@ describe("GET /v1/admin", () => {
   it("treats an empty ADMIN_KEY as unset and refuses a short one", () => {
     expect(testEnv({ ADMIN_KEY: "" }).ADMIN_KEY).toBeUndefined();
     expect(() => testEnv({ ADMIN_KEY: "short" })).toThrow();
+    expect(testEnv({ ADMIN_KEY: "assayadmin" }).ADMIN_KEY).toBe("assayadmin");
   });
 
   it("does not exist without an admin key configured", async () => {
@@ -261,10 +263,50 @@ describe("GET /v1/admin", () => {
     expect(s.process.rssMb).toBeGreaterThan(0);
   });
 
+  it("accepts a short key the operator chose", async () => {
+    const { app: a } = app({ ADMIN_KEY: "assayadmin" }, rpc);
+    expect((await get(a, "/v1/admin", { authorization: "Bearer assayadmin" })).status).toBe(200);
+  });
+
+  it("locks out an IP after five wrong keys, without locking out anyone else", async () => {
+    const { app: a } = app({ ADMIN_KEY: ADMIN }, rpc);
+    for (let i = 0; i < 5; i++)
+      expect((await get(a, "/v1/admin", { authorization: `Bearer guess${i}` })).status).toBe(401);
+    const locked = await get(a, "/v1/admin", { authorization: `Bearer ${ADMIN}` });
+    expect(locked.status).toBe(429);
+    expect(Number(locked.headers.get("retry-after"))).toBeGreaterThan(0);
+    const other = await get(a, "/v1/admin", {
+      authorization: `Bearer ${ADMIN}`,
+      "x-forwarded-for": "198.51.100.99",
+    });
+    expect(other.status).toBe(200);
+  });
+
+  it("does not count a missing key as a guess", async () => {
+    const { app: a } = app({ ADMIN_KEY: ADMIN }, rpc);
+    for (let i = 0; i < 8; i++) await get(a, "/v1/admin");
+    expect((await get(a, "/v1/admin", { authorization: `Bearer ${ADMIN}` })).status).toBe(200);
+  });
+
   it("is not counted as usage", async () => {
     const { app: a, usage } = app({ ADMIN_KEY: ADMIN }, rpc);
     await get(a, "/v1/admin", { authorization: `Bearer ${ADMIN}` });
     await get(a, "/v1/stats");
     expect(Object.values(usage.totals()).every((n) => n === 0)).toBe(true);
+  });
+});
+
+describe("redactUrls", () => {
+  it("cuts every URL to its origin so keys in paths and queries never reach the browser", () => {
+    expect(
+      redactUrls(
+        "HTTP request failed. URL: https://celo-mainnet.core.chainstack.com/abc123def456 Request body",
+      ),
+    ).toBe("HTTP request failed. URL: https://celo-mainnet.core.chainstack.com/… Request body");
+    expect(redactUrls('{"url":"https://rpc.example/v1?key=s3cret","n":1}')).toBe(
+      '{"url":"https://rpc.example/…","n":1}',
+    );
+    expect(redactUrls("wss://ws.example/token/xyz")).toBe("wss://ws.example/…");
+    expect(redactUrls("no urls here")).toBe("no urls here");
   });
 });

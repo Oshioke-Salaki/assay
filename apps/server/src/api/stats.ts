@@ -120,6 +120,25 @@ function daySeries<T extends { day: number }>(rows: T[], from: number, to: numbe
   return out;
 }
 
+/**
+ * RPC and gateway URLs can carry an API key in their path or query (Chainstack does). The
+ * operator view shows log lines in a browser, so every URL is cut to its origin.
+ */
+export function redactUrls(text: string): string {
+  return text.replace(
+    /\b(https?|wss?):\/\/([^/\s"'?#]+)[^\s"']*/gi,
+    (_, scheme, host) => `${scheme}://${host}/…`,
+  );
+}
+
+function redactFields(fields: Record<string, unknown>): Record<string, unknown> {
+  try {
+    return JSON.parse(redactUrls(JSON.stringify(fields))) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const WATCHED = TOKENS.filter((t) => t.fiat === "USD");
 
@@ -209,7 +228,10 @@ export async function adminStats(db: DB, env: Env, rpc: PublicClient, now = Date
         "SELECT id, ts, service, status, usd, tx_hash AS txHash, note FROM paid_calls ORDER BY id DESC LIMIT 20",
       )
       .all(),
-    problems: [...recentProblems()].reverse().slice(0, 50),
+    problems: [...recentProblems()]
+      .reverse()
+      .slice(0, 50)
+      .map((p) => ({ ...p, msg: redactUrls(p.msg), fields: p.fields && redactFields(p.fields) })),
     database: {
       sizeMb: Math.round((pages * pageSize) / 1e5) / 10,
       settlements: (db.prepare("SELECT COUNT(*) AS n FROM settlements").get() as { n: number }).n,
