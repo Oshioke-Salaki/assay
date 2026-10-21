@@ -1,7 +1,7 @@
-import { createAssay } from "@assay/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createAssay } from "assayscore";
 import { describe, expect, it, vi } from "vitest";
 import { registerTools } from "../src/tools.js";
 

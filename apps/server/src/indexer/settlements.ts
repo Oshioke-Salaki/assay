@@ -5,7 +5,7 @@ import {
   type Settlement,
   TOPICS,
   X402_PERMIT2_PROXY,
-} from "@assay/core";
+} from "assayscore-core";
 import { type DB, getCursor, setCursor } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
 import { log } from "../lib/log.js";

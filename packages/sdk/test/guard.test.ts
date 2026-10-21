@@ -1,4 +1,4 @@
-import type { CheckResult } from "@assay/core";
+import type { CheckResult } from "assayscore-core";
 import { describe, expect, it, vi } from "vitest";
 
 type FetchInput = Parameters<typeof fetch>[0];

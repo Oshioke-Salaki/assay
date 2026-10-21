@@ -1,9 +1,9 @@
-import { CAIP2_CELO, dayOf, type FiatCode, TOKENS, type TokenInfo } from "@assay/core";
 import { HTTPFacilitatorClient, type RoutesConfig } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { declareEip2612GasSponsoringExtension } from "@x402/extensions";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
+import { CAIP2_CELO, dayOf, type FiatCode, TOKENS, type TokenInfo } from "assayscore-core";
 import type { MiddlewareHandler } from "hono";
 import type { FxRates } from "../enrich/fx.js";
 import type { Env } from "../env.js";

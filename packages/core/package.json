@@ -1,5 +1,5 @@
 {
-  "name": "@assay/core",
+  "name": "assayscore-core",
   "version": "0.1.0",
   "description": "Assay scoring engine: organic x402 revenue, payment loops and ratings for Celo",
   "license": "MIT",

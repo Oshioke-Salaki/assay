@@ -1,4 +1,4 @@
-import type { Address, Assessment, CheckResult, Rating } from "@assay/core";
+import type { Address, Assessment, CheckResult, Rating } from "assayscore-core";
 
 /** Server-side base URL (can be a private address) and the public one the browser uses. */
 export const API_INTERNAL =

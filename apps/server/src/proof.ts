@@ -1,4 +1,4 @@
-import type { Settlement } from "@assay/core";
+import type { Settlement } from "assayscore-core";
 import type { Hash, PublicClient } from "viem";
 import type { FxRates } from "./enrich/fx.js";
 import { extractSettlements } from "./indexer/extract.js";

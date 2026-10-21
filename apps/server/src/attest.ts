@@ -6,7 +6,7 @@ import {
   attestationDomain,
   RATING_CODES,
   toMicros,
-} from "@assay/core";
+} from "assayscore-core";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 

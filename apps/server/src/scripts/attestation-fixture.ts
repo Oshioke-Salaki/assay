@@ -5,7 +5,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { type Assessment, assess, Ledger } from "@assay/core";
+import { type Assessment, assess, Ledger } from "assayscore-core";
 import { Attester } from "../attest.js";
 
 const KEY = `0x${"a1".repeat(32)}` as const;

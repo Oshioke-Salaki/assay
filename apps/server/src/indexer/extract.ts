@@ -9,7 +9,7 @@ import {
   topicToAddress,
   unitsToNumber,
   X402_PERMIT2_PROXY,
-} from "@assay/core";
+} from "assayscore-core";
 import type { SqdBlock, SqdLog } from "./sqd.js";
 
 /** Fiat units per 1 USD on a UTC day. */

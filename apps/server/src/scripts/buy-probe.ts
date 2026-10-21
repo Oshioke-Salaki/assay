@@ -4,7 +4,7 @@
  *
  *   pnpm --filter @assay/server exec tsx src/scripts/buy-probe.ts
  */
-import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
+import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "assayscore-core";
 import { createPublicClient, http, pad } from "viem";
 import { celo } from "viem/chains";
 import { openDatabase } from "../db.js";

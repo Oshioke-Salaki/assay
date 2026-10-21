@@ -1,4 +1,4 @@
-import { dayOf, type FiatCode } from "@assay/core";
+import { dayOf, type FiatCode } from "assayscore-core";
 import type { DB } from "../db.js";
 import { fetchJson } from "../lib/http.js";
 import { log } from "../lib/log.js";

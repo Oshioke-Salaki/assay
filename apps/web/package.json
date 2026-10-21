@@ -12,7 +12,7 @@
     "e2e": "node e2e/wallet.e2e.mjs"
   },
   "dependencies": {
-    "@assay/core": "workspace:*",
+    "assayscore-core": "workspace:*",
     "@celo/attribution-tags": "0.5.0",
     "@tanstack/react-query": "5.104.5",
     "@vercel/analytics": "2.0.1",

@@ -1,5 +1,5 @@
 {
-  "name": "@assay/sdk",
+  "name": "assayscore",
   "version": "0.1.0",
   "description": "Check Celo x402 sellers with Assay before paying them. Includes a drop-in guard for any x402 fetch client.",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@assay/core": "workspace:*"
+    "assayscore-core": "workspace:*"
   },
   "engines": {
     "node": ">=20"

@@ -3,7 +3,7 @@ import {
   ERC8004_REPUTATION_REGISTRY,
   identityRegistryAbi,
   reputationRegistryAbi,
-} from "@assay/core";
+} from "assayscore-core";
 import { encodeAbiParameters, encodeEventTopics, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { decodeWalletMetadata, parseInlineFeedback, RegistryIndexer } from "../src/indexer/registry.js";

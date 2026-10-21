@@ -1,4 +1,4 @@
-import type { Rating } from "@assay/core";
+import type { Rating } from "assayscore-core";
 
 /** Dollars with sensible precision: cents below $1,000, whole dollars above, compact above $1M. */
 export function usd(n: number | null | undefined): string {

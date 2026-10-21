@@ -1,4 +1,4 @@
-import { isAddress } from "@assay/core";
+import { isAddress } from "assayscore-core";
 import { z } from "zod";
 
 const address = z

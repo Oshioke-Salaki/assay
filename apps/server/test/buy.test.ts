@@ -1,4 +1,4 @@
-import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
+import { SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "assayscore-core";
 import { createPublicClient, http, pad } from "viem";
 import { celo } from "viem/chains";
 import { afterEach, describe, expect, it, vi } from "vitest";

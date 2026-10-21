@@ -9,10 +9,10 @@ COPY packages/sdk/package.json packages/sdk/
 COPY packages/mcp/package.json packages/mcp/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile --filter @assay/server... --filter @assay/core
+RUN pnpm install --frozen-lockfile --filter @assay/server... --filter assayscore-core
 COPY packages/core packages/core
 COPY apps/server apps/server
-RUN pnpm --filter @assay/core build && pnpm --filter @assay/server build
+RUN pnpm --filter assayscore-core build && pnpm --filter @assay/server build
 RUN pnpm --filter @assay/server deploy --prod --legacy /out
 
 FROM node:22-bookworm-slim

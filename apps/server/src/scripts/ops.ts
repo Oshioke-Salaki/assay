@@ -12,14 +12,14 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { verifyTx, withAttribution } from "@celo/attribution-tags";
 import {
   ERC8004_IDENTITY_REGISTRY,
   identityRegistryAbi,
   isAddress,
   isTxHash,
   normalizeAddress,
-} from "@assay/core";
-import { verifyTx, withAttribution } from "@celo/attribution-tags";
+} from "assayscore-core";
 import {
   createPublicClient,
   createWalletClient,

@@ -1,4 +1,4 @@
-import type { Rating } from "@assay/core";
+import type { Rating } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell, ErrorState, Panel } from "@/components/AppShell";

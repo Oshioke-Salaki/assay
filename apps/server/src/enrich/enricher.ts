@@ -1,4 +1,4 @@
-import { type Address, SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "@assay/core";
+import { type Address, SELF_AGENT_REGISTRY, selfAgentRegistryAbi } from "assayscore-core";
 import { type PublicClient, pad } from "viem";
 import type { DB } from "../db.js";
 import type { BlockSource } from "../indexer/sqd.js";

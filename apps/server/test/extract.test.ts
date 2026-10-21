@@ -1,4 +1,4 @@
-import { TOPICS } from "@assay/core";
+import { TOPICS } from "assayscore-core";
 import { describe, expect, it } from "vitest";
 import { extractSettlements } from "../src/indexer/extract.js";
 import type { SqdBlock } from "../src/indexer/sqd.js";

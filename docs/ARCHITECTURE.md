@@ -21,7 +21,7 @@
 └───────────────┬───────────────────────────────┬──────────────────────────┘
                 │ JSON                          │ x402 (USA₮/USDC/USD₮) through the Celo facilitator
                 ▼                               ▼
-   apps/web (Next.js)                 agents: @assay/sdk guard, @assay/mcp, any x402 client
+   apps/web (Next.js)                 agents: assayscore guard, assayscore-mcp, any x402 client
                 │                               │
                 └───── signed score ───► AssayRegistry (contracts) ◄── any Celo contract reads it
 ```

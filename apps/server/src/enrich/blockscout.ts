@@ -1,4 +1,4 @@
-import { type Address, TOKENS } from "@assay/core";
+import { type Address, TOKENS } from "assayscore-core";
 import { fetchJson, HttpError } from "../lib/http.js";
 
 /** Tokens whose arrival counts as "funding". Arbitrary airdropped tokens do not. */

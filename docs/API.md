@@ -11,7 +11,7 @@ Base URL: `https://api-production-63cc.up.railway.app` (or wherever you deploy y
 
 An unpaid request answers 402 with a `PAYMENT-REQUIRED` header listing six options in this order: USD₮ (the default), USDC, USA₮, then Ripio's wARS, wBRL and wCOP. The dollars are paid with EIP-3009. The wFIAT tokens are paid through the x402 Permit2 proxy at the day's exchange rate, rounded up to two significant figures (for $0.002: 3.1 wARS, 0.011 wBRL, 6.4 wCOP at mid-October rates). The 402 declares `eip2612GasSponsoring`, so a payer without a Permit2 approval signs an EIP-2612 permit and the facilitator submits it: no payer ever needs CELO for gas.
 
-x402's default selector takes the first option, whatever the wallet holds. An agent that holds USDC should pick it: `new x402Client(preferAssets("USDC"))`, with `preferAssets` from `@assay/sdk`. x402 clients also pay only their default assets (on Celo: USDC, USD₮, USA₮) unless told otherwise. To pay in a wFIAT token, allow it on the client:
+x402's default selector takes the first option, whatever the wallet holds. An agent that holds USDC should pick it: `new x402Client(preferAssets("USDC"))`, with `preferAssets` from `assayscore`. x402 clients also pay only their default assets (on Celo: USDC, USD₮, USA₮) unless told otherwise. To pay in a wFIAT token, allow it on the client:
 
 ```ts
 client.setSpendControls({
@@ -67,11 +67,11 @@ Flag codes: `CIRCULAR_FLOW`, `SELLER_FUNDED_PAYERS`, `SHARED_FUNDER`, `SAME_HUMA
 ## SDK
 
 ```sh
-npm install @assay/sdk
+npm install assayscore
 ```
 
 ```ts
-import { createAssay, withAssayGuard } from "@assay/sdk";
+import { createAssay, withAssayGuard } from "assayscore";
 
 const assay = createAssay(); // the public API; pass { baseUrl } for your own server
 const { check } = await assay.address("0xSeller");
@@ -84,10 +84,10 @@ The package README has the full guard options: [packages/sdk/README.md](../packa
 ## MCP
 
 ```sh
-claude mcp add assay -- npx -y @assay/mcp
+claude mcp add assay -- npx -y assayscore-mcp
 ```
 
-Any other MCP client: `{ "command": "npx", "args": ["-y", "@assay/mcp"] }`. Set `ASSAY_URL` to use your own server.
+Any other MCP client: `{ "command": "npx", "args": ["-y", "assayscore-mcp"] }`. Set `ASSAY_URL` to use your own server.
 
 Tools: `assay_check_seller`, `assay_report`, `assay_find_agents`, `assay_economy`.
 

@@ -1,4 +1,4 @@
-import { type Assessment, ATTESTATION_TYPES, assess, Ledger } from "@assay/core";
+import { type Assessment, ATTESTATION_TYPES, assess, Ledger } from "assayscore-core";
 import { recoverTypedDataAddress } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { scaleValue } from "../src/analysis.js";

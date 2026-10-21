@@ -1,6 +1,10 @@
 "use client";
 
-import { ERC8004_IDENTITY_REGISTRY, ERC8004_REPUTATION_REGISTRY, reputationRegistryAbi } from "@assay/core";
+import {
+  ERC8004_IDENTITY_REGISTRY,
+  ERC8004_REPUTATION_REGISTRY,
+  reputationRegistryAbi,
+} from "assayscore-core";
 import { useEffect, useState } from "react";
 import { keccak256, stringToBytes, toHex } from "viem";
 import styles from "@/components/app.module.css";

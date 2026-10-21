@@ -1,3 +1,4 @@
+import { getConnInfo } from "@hono/node-server/conninfo";
 import {
   type Address,
   type Assessment,
@@ -11,8 +12,7 @@ import {
   THIN_FILE,
   TOKENS,
   verdictFor,
-} from "@assay/core";
-import { getConnInfo } from "@hono/node-server/conninfo";
+} from "assayscore-core";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";

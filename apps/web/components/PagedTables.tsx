@@ -1,6 +1,6 @@
 "use client";
 
-import type { CounterpartyLine, PayerLine } from "@assay/core";
+import type { CounterpartyLine, PayerLine } from "assayscore-core";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { date, int, short, usd } from "@/lib/format";

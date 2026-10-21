@@ -5,7 +5,7 @@ import {
   identityRegistryAbi,
   isTxHash,
   reputationRegistryAbi,
-} from "@assay/core";
+} from "assayscore-core";
 import { decodeEventLog, type Hex, isHex, toEventSelector } from "viem";
 import { type DB, getCursor, setCursor } from "../db.js";
 import { log } from "../lib/log.js";

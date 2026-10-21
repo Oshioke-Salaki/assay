@@ -1,4 +1,4 @@
-import { METHODOLOGY_VERSION, RATING_FLOORS, THIN_FILE } from "@assay/core";
+import { METHODOLOGY_VERSION, RATING_FLOORS, THIN_FILE } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell, Panel } from "@/components/AppShell";
@@ -70,7 +70,7 @@ curl ${api}/v1/address/0xSELLER
 import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
-import { preferAssets } from "@assay/sdk";
+import { preferAssets } from "assayscore";
 
 // Pay in the token your wallet holds; x402 otherwise takes the server's first option (USD₮).
 const client = new x402Client(preferAssets("USDT", "USDC"))
@@ -164,9 +164,9 @@ const { verdict, rating, reasons, attestation } = await res.json();
             untouched.
           </p>
           <Code label="Guarding an x402 client">{`
-import { withAssayGuard, AssayBlockedError } from "@assay/sdk";
+import { withAssayGuard, AssayBlockedError } from "assayscore";
 
-// npm install @assay/sdk
+// npm install assayscore
 const guarded = withAssayGuard(fetch, pay, {
   minRating: "BB",        // optional: refuse anything rated below BB
   allowUnrated: true,     // new sellers have to start somewhere
@@ -187,10 +187,10 @@ try {
             <code>assay_report</code>, <code>assay_find_agents</code> and <code>assay_economy</code>.
           </p>
           <Code label="Add the MCP server to Claude Code">{`
-claude mcp add assay -- npx -y @assay/mcp
+claude mcp add assay -- npx -y assayscore-mcp
 
 # Claude Desktop, Cursor or any MCP client:
-# { "mcpServers": { "assay": { "command": "npx", "args": ["-y", "@assay/mcp"] } } }
+# { "mcpServers": { "assay": { "command": "npx", "args": ["-y", "assayscore-mcp"] } } }
           `}</Code>
         </Panel>
 

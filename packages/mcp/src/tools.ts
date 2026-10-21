@@ -1,5 +1,5 @@
-import type { AssayClient } from "@assay/sdk";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AssayClient } from "assayscore";
 import { z } from "zod";
 
 const address = z

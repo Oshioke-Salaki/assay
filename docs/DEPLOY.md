@@ -8,7 +8,7 @@ Needs Node 22.12+, a persistent volume for the SQLite file, and outbound HTTPS.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @assay/core build && pnpm --filter @assay/server build
+pnpm --filter assayscore-core build && pnpm --filter @assay/server build
 DATABASE_PATH=/data/assay.db pnpm --filter @assay/server backfill   # once; resumable
 DATABASE_PATH=/data/assay.db pnpm --filter @assay/server start
 ```
@@ -39,14 +39,17 @@ A failure opens one issue labelled `uptime`; GitHub emails everyone watching the
 
 ## Publishing the packages
 
-`@assay/core`, `@assay/sdk` and `@assay/mcp` publish to npm from the monorepo. `pnpm publish` turns `workspace:*` into the real version, and `prepublishOnly` builds each package first:
+`assayscore-core`, `assayscore` (the SDK) and `assayscore-mcp` publish to npm from the monorepo. npm requires two-factor authentication to publish, and only the npm CLI handles its browser approval, so pack with pnpm (which turns `workspace:*` into real versions) and publish the tarballs with npm, core first:
 
 ```sh
 npm login
-pnpm -r --filter "./packages/*" publish --access public
+for p in core sdk mcp; do (cd packages/$p && pnpm run build && pnpm pack --pack-destination ../../out); done
+npm publish out/assayscore-core-*.tgz --access public --auth-type=web
+npm publish out/assayscore-[0-9]*.tgz --access public --auth-type=web
+npm publish out/assayscore-mcp-*.tgz --access public --auth-type=web
 ```
 
-Bump the three versions together. Publish `core` first, since `sdk` and `mcp` depend on it; `pnpm -r` already publishes in dependency order.
+Approve the first publish in the browser and tick the option to skip 2FA for a few minutes; the other two then go straight through. Bump the three versions together.
 
 ## Onchain setup (once)
 

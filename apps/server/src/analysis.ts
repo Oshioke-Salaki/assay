@@ -10,7 +10,7 @@ import {
   Ledger,
   type PairFlow,
   summarizeEconomy,
-} from "@assay/core";
+} from "assayscore-core";
 import type { DB } from "./db.js";
 import { log } from "./lib/log.js";
 

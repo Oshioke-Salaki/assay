@@ -5,7 +5,7 @@ const api = process.env.NEXT_PUBLIC_ASSAY_API ?? "http://localhost:8787";
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ["@assay/core"],
+  transpilePackages: ["assayscore-core"],
   async headers() {
     return [
       {

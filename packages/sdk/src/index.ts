@@ -1,6 +1,6 @@
-import { type Address, type CheckResult, isAddress, RATING_CODES, type Rating } from "@assay/core";
+import { type Address, type CheckResult, isAddress, RATING_CODES, type Rating } from "assayscore-core";
 
-export type { Address, CheckResult, Rating } from "@assay/core";
+export type { Address, CheckResult, Rating } from "assayscore-core";
 
 type Fetch = typeof fetch;
 type FetchInput = Parameters<typeof fetch>[0];
@@ -34,7 +34,7 @@ export class AssayError extends Error {
 export interface AddressReport {
   asOf: number;
   check: CheckResult;
-  // The full assessment is typed loosely here; see @assay/core's Assessment.
+  // The full assessment is typed loosely here; see assayscore-core's Assessment.
   assessment: Record<string, unknown> & { rating: Rating; score: number | null };
   agents: unknown[];
 }

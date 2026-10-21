@@ -1,4 +1,4 @@
-import { dayOf, tokenByAddress } from "@assay/core";
+import { dayOf, tokenByAddress } from "assayscore-core";
 import type { PublicClient } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Analysis } from "../src/analysis.js";

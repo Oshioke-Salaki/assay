@@ -1,4 +1,4 @@
-import { verdictFor } from "@assay/core";
+import { verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";

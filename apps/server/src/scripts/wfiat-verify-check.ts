@@ -3,9 +3,10 @@
  * from a fresh empty wallet, and ask the Celo facilitator to verify it. A well-formed Permit2 +
  * EIP-2612 payment is refused only for the missing balance; any other reason is a format problem.
  */
-import { CAIP2_CELO, TOKENS } from "@assay/core";
+
 import { x402Client } from "@x402/core/client";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { CAIP2_CELO, TOKENS } from "assayscore-core";
 import { createPublicClient, http } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";

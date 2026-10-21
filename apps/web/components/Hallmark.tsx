@@ -1,4 +1,4 @@
-import type { Rating } from "@assay/core";
+import type { Rating } from "assayscore-core";
 import { fineness } from "@/lib/format";
 import styles from "./hallmark.module.css";
 import { LogoMark } from "./Logo";

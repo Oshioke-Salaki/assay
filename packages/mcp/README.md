@@ -1,4 +1,4 @@
-# @assay/mcp
+# assayscore-mcp
 
 An MCP server that lets an AI agent check a Celo x402 seller or ERC-8004 agent with [Assay](https://assayscore.xyz) before it pays.
 
@@ -7,7 +7,7 @@ An MCP server that lets an AI agent check a Celo x402 seller or ERC-8004 agent w
 Claude Code:
 
 ```sh
-claude mcp add assay -- npx -y @assay/mcp
+claude mcp add assay -- npx -y assayscore-mcp
 ```
 
 Claude Desktop, Cursor or any MCP client (`mcpServers` in its config):
@@ -15,7 +15,7 @@ Claude Desktop, Cursor or any MCP client (`mcpServers` in its config):
 ```json
 {
   "mcpServers": {
-    "assay": { "command": "npx", "args": ["-y", "@assay/mcp"] }
+    "assay": { "command": "npx", "args": ["-y", "assayscore-mcp"] }
   }
 }
 ```

@@ -1,11 +1,11 @@
-# @assay/sdk
+# assayscore
 
 Check a Celo x402 seller with [Assay](https://assayscore.xyz) before your agent pays it.
 
 Assay reads every x402 settlement on Celo, nets out payment loops and payers the seller funded itself, and rates what is left. A seller that pays itself in a circle is rated on what it really earns, not on what it moved.
 
 ```sh
-npm install @assay/sdk
+npm install assayscore
 ```
 
 ## Guard your agent's payments
@@ -13,7 +13,7 @@ npm install @assay/sdk
 `withAssayGuard` wraps any x402-paying fetch. The first request goes out unpaid; if the seller answers 402, every `payTo` it names is checked with Assay, and only if all pass does the paid request go out. A blocked seller throws `AssayBlockedError` and is never paid.
 
 ```ts
-import { withAssayGuard, AssayBlockedError } from "@assay/sdk";
+import { withAssayGuard, AssayBlockedError } from "assayscore";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
@@ -35,7 +35,7 @@ The guard uses Assay's free endpoint, so it costs nothing.
 ## Read reports
 
 ```ts
-import { createAssay } from "@assay/sdk";
+import { createAssay } from "assayscore";
 
 const assay = createAssay();
 const report = await assay.address("0x5df8ae2b963165b735b18ca86b1ea448d2aa032c");
@@ -56,7 +56,7 @@ const { verdict, attestation } = await assay.check(seller);
 Assay prices in USD₮ first, then USDC and USA₮, and also accepts Ripio's wARS, wBRL and wCOP at the day's exchange rate, gaslessly through Permit2. x402's default selector takes the server's first option whatever your wallet holds, so tell the client which token to pay in:
 
 ```ts
-import { preferAssets, CELO_PAY_TOKENS } from "@assay/sdk";
+import { preferAssets, CELO_PAY_TOKENS } from "assayscore";
 
 const client = new x402Client(preferAssets("USDC", "USDT")); // pays USDC if offered, else USD₮
 ```
@@ -74,6 +74,6 @@ client.setSpendControls({
 
 - API reference: https://github.com/Oshioke-Salaki/assay/blob/main/docs/API.md
 - How scores are made: https://github.com/Oshioke-Salaki/assay/blob/main/docs/METHODOLOGY.md
-- MCP server: [`@assay/mcp`](https://www.npmjs.com/package/@assay/mcp)
+- MCP server: [`assayscore-mcp`](https://www.npmjs.com/package/assayscore-mcp)
 
 MIT

@@ -1,4 +1,4 @@
-import { TOPICS } from "@assay/core";
+import { TOPICS } from "assayscore-core";
 import { type Hex, pad } from "viem";
 import { describe, expect, it } from "vitest";
 import { Enricher } from "../src/enrich/enricher.js";

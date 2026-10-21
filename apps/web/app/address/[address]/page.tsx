@@ -1,5 +1,5 @@
-import type { Flag } from "@assay/core";
-import { verdictFor } from "@assay/core";
+import type { Flag } from "assayscore-core";
+import { verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";

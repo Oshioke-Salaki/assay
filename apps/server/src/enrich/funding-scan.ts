@@ -1,4 +1,4 @@
-import { type Address, TOKENS, TOPICS, topicToAddress } from "@assay/core";
+import { type Address, TOKENS, TOPICS, topicToAddress } from "assayscore-core";
 import { type Hex, pad } from "viem";
 import type { DB } from "../db.js";
 import type { BlockSource } from "../indexer/sqd.js";

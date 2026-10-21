@@ -1,9 +1,9 @@
 "use client";
 
-import type { Rating } from "@assay/core";
-import { type TokenInfo, tokenByAddress } from "@assay/core";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import type { Rating } from "assayscore-core";
+import { type TokenInfo, tokenByAddress } from "assayscore-core";
 import { useState } from "react";
 import { formatUnits } from "viem";
 import styles from "@/components/app.module.css";
