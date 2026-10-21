@@ -14,6 +14,7 @@ export const revalidate = 30;
 
 const SERVICES: Record<string, { label: string; what: string }> = {
   "buy-x-search": { label: "X search through buy", what: "What X says about a seller" },
+  unmatched: { label: "Payments whose answer was lost", what: "Found onchain by the reconciler" },
 };
 
 export default async function StatsPage() {
@@ -75,13 +76,14 @@ export default async function StatsPage() {
           <p className={styles.kpiLabel}>Requests, 30 days</p>
           <p className={`${styles.kpiValue} ${styles.kpiLead} ${styles.kpiData}`}>{int(sum.total)}</p>
           <p className={styles.kpiNote}>
-            {today ? `${int(usageParts(today).total)} today` : "counting"}, {int(sum.reports)} reports
+            {today ? `${int(usageParts(today).total)} today` : "counting"}, {int(sum.reports)} report
+            {sum.reports === 1 ? "" : "s"}
           </p>
         </div>
         <div className={styles.kpi}>
-          <p className={styles.kpiLabel}>Callers</p>
+          <p className={styles.kpiLabel}>Direct API callers</p>
           <p className={styles.kpiValue}>{int(today?.visitors ?? 0)}</p>
-          <p className={styles.kpiNote}>today, busiest day {int(peakCallers)}</p>
+          <p className={styles.kpiNote}>today, busiest day {int(peakCallers)}; site visits not included</p>
         </div>
         <div className={styles.kpi}>
           <p className={styles.kpiLabel}>Paid answers</p>
