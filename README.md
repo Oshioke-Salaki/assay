@@ -4,7 +4,7 @@
 
 Assay reads every x402 settlement on Celo mainnet and tests each seller's revenue for what is real. Money that goes round in payment loops, and money paid by wallets the seller funded, is struck out. What is left is the seller's *organic* revenue, read as fineness in parts per thousand, the way an assay office marks silver. Every address gets a rating from AAA to D, a report with the evidence behind each finding, and a signed EIP-712 score that any Celo contract can verify through `AssayRegistry`.
 
-On the first full pass of Celo mainnet history, Assay found 6 payment loops (the largest 378 wallets paying each other about $10 back and forth across 159,190 settlements) and netted out over $14,000 of circular volume.
+Across all 858,007 x402 settlements on Celo mainnet ($192,170), Assay finds that **only 21% is organic**. $123,578 was paid by wallets the sellers funded themselves, and $28,870 went round in 9 payment loops, the largest 378 wallets paying each other. Of 660 sellers, 138 are rated D.
 
 - **People** read reports in the browser for free.
 - **Agents** pay $0.002 per check over x402 in USD₮ (or USDC, USA₮, wARS, wBRL, wCOP), or put `withAssayGuard` (`npm install assayscore`) in front of their own x402 client so a blocked seller is never paid.
