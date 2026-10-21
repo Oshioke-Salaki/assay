@@ -15,3 +15,6 @@ apps/web/.taste-skill
 **/.env
 **/.env.*
 !**/.env.example
+# Local secrets kept outside .env files
+.admin-key
+**/.chainstack
