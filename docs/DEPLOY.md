@@ -50,7 +50,29 @@ fly machine restart <id>
 
 The indexer resumes from the copy's cursor and catches up on its own.
 
-**Back to Railway.** Railway's `api` service is the same image and its own database. To switch back: point the `api` CNAME at the Railway target (`05lpg5us.up.railway.app`; the `_railway-verify.api` TXT record is already in place), wait for its certificate, and stop the Fly machine (`fly scale count 0`) so only one server runs enrichment from the agent wallet. If Fly ran for a while first, carry its database over the same way.
+**Switching between Fly and Railway.** `api.assayscore.xyz` is the address the site, the SDK and the MCP server use, so whichever host it points at is the one serving Assay. One command moves it:
+
+```sh
+node scripts/api-host.mjs status            # where api.assayscore.xyz points, and whether each host is healthy and current
+node scripts/api-host.mjs railway --dry-run # print the steps without changing anything
+node scripts/api-host.mjs railway           # Fly -> Railway
+node scripts/api-host.mjs fly               # Railway -> Fly
+```
+
+A switch never points anything at a host that is not answering:
+
+1. Check that the target is healthy and caught up. It also has to run the current version, judged by its 402 offering all six tokens; `--force` overrides that.
+2. Move the site to the target's own URL, which already has a certificate, and redeploy the site.
+3. Point the `api` CNAME at the target. The new record is added before the old one is removed.
+4. Wait for the target to serve `api.assayscore.xyz` over HTTPS.
+5. Move the site back to `https://api.assayscore.xyz`.
+6. Stop the old host's machine. Fly is stopped, not destroyed, so it keeps its volume and starts in seconds. Railway is stopped in its dashboard.
+
+If the certificate is slow to arrive, the command stops after step 4 with the site still working on the target's own URL. Run it again later to finish.
+
+Both hosts run the same image, each with its own SQLite file. Each indexes Celo on its own, so the one taking over is already current: a stopped Fly machine catches up within a minute of starting, and Railway keeps indexing while it runs. Enrichment data such as funding fills in again on whichever host serves.
+
+The Railway service still runs the version from before the outage. Before switching back, deploy the latest code there with `railway up --service api` from the repo root. The switch refuses an outdated Railway unless forced. Railway's `_railway-verify.api` TXT record is already in DNS, so its certificate can be issued as soon as the CNAME points there. Also set `PUBLIC_URL=https://api.assayscore.xyz` on the Railway service. Its CORS list and `WEB_URL` already name assayscore.xyz; those changes are staged and apply with that deploy.
 
 ## Monitoring
 

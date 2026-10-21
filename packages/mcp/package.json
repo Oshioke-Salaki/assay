@@ -1,6 +1,6 @@
 {
   "name": "assayscore-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Assay: check Celo x402 sellers and ERC-8004 agents before paying them",
   "license": "MIT",
   "author": "Oshioke Salaki",
