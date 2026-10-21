@@ -29,6 +29,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 800;
+  min-height: 32px;
   font-size: 1rem;
   letter-spacing: -0.03em;
   text-decoration: none;
@@ -433,12 +434,20 @@
   grid-column: 2 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 0 12px;
   font-size: 0.8125rem;
 }
 
+/* Evidence links sit in a tight row; padding gives each a 27px touch target without moving the text. */
 .flagEvidence a {
+  display: inline-block;
+  padding: 4px 0;
   color: var(--app-muted);
+}
+
+.panelHead a {
+  display: inline-block;
+  padding: 3px 0;
 }
 
 .flagUsd {
