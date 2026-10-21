@@ -150,6 +150,40 @@ async function registerAgent() {
   throw new Error("No Registered event found");
 }
 
+/** Point Assay's ERC-8004 identity at a new registration file, e.g. after the API moves domain. */
+async function setAgentUri(uriArg: string | undefined) {
+  const env = loadEnv();
+  const agentId = BigInt(need("AGENT_ID"));
+  const uri =
+    uriArg ??
+    `${(env.PUBLIC_URL ?? need("PUBLIC_URL")).replace(/\/$/, "")}/.well-known/agent-registration.json`;
+  // The file must answer before anything onchain points at it.
+  const res = await fetch(uri);
+  if (!res.ok) throw new Error(`${uri} answered ${res.status}; not updating the registry.`);
+  const w = wallet();
+  const hash = await w.writeContract({
+    address: ERC8004_IDENTITY_REGISTRY,
+    abi: setAgentUriAbi,
+    functionName: "setAgentURI",
+    args: [agentId, uri],
+  });
+  await confirm(hash);
+  console.log(`Agent #${agentId} now points at ${uri}`);
+}
+
+const setAgentUriAbi = [
+  {
+    type: "function",
+    name: "setAgentURI",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "newURI", type: "string" },
+    ],
+    outputs: [],
+  },
+] as const;
+
 async function publish(subjectArg: string | undefined) {
   if (!subjectArg || !isAddress(subjectArg)) throw new Error("Usage: ops publish 0xSubjectAddress");
   const env = loadEnv();
@@ -223,6 +257,7 @@ const [cmd, arg] = process.argv.slice(2);
 const commands: Record<string, () => Promise<void>> = {
   "deploy-registry": deployRegistry,
   "register-agent": registerAgent,
+  "set-agent-uri": () => setAgentUri(arg),
   publish: () => publish(arg),
   "verify-tag": () => verifyTag(arg),
   send: () => send(arg, process.argv[4], process.argv[5]),
