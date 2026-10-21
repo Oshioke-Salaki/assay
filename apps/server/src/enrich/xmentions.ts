@@ -251,6 +251,14 @@ export function xReason(m: XMentions | null): string | null {
   return null;
 }
 
+/** The search service would not take Assay's payment. */
+export class PaymentRefused extends Error {
+  constructor(detail: string) {
+    super(`payment refused${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    this.name = "PaymentRefused";
+  }
+}
+
 export interface XMentionsOptions {
   /** Paying fetch for the buy gateway's X search. */
   pay: typeof fetch;
@@ -325,11 +333,14 @@ export class XMentionsWatcher {
         body: JSON.stringify({ query: `"${a}"`, type: "top" }),
         signal: AbortSignal.timeout(120_000),
       });
+      // Still 402 after paying means the payment itself was refused (an empty wallet, an expired
+      // authorisation). That says nothing about the address, so nothing is stored for it.
+      if (res.status === 402) throw new PaymentRefused(await res.text().catch(() => ""));
       if (!res.ok) throw new Error(`X search answered ${res.status}`);
       const { posts, tx } = readSearch(await res.json(), a);
       result = summarize(a, posts, now, tx);
     } catch (err) {
-      if (err instanceof BudgetExceeded) throw err;
+      if (err instanceof BudgetExceeded || err instanceof PaymentRefused) throw err;
       result = {
         address: a,
         checkedAt: now,
@@ -370,6 +381,13 @@ export class XMentionsWatcher {
         } else log.warn("x mentions failed", { address: next, error: r.error });
         await sleep(r.status === "ok" ? (this.opts.paceMs ?? 20_000) : 60_000, signal);
       } catch (err) {
+        if (err instanceof PaymentRefused) {
+          log.error("x mentions paused: payment refused; top up the agent wallet with USDC", {
+            reason: err.message,
+          });
+          await sleep(60 * 60_000, signal);
+          continue;
+        }
         if (!(err instanceof BudgetExceeded)) throw err;
         const untilMidnight = (DAY - (nowSec() % DAY) + 60) * 1000;
         log.info("x mentions budget spent for today", { resumeInMin: Math.round(untilMidnight / 60_000) });

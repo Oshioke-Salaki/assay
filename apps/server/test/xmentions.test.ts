@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
+  PaymentRefused,
   parseXDate,
   readSearch,
   readXMentions,
@@ -267,6 +268,19 @@ describe("XMentionsWatcher", () => {
     }).check(a, 2);
     expect(readXMentions(db, a)).toMatchObject({ status: "error", warnings: 0 });
     expect(xReason(readXMentions(db, a))).toBeNull();
+  });
+
+  it("an empty wallet pauses the search instead of marking the seller as failed", async () => {
+    const db = memoryDb();
+    seed(db);
+    const w = new XMentionsWatcher(db, {
+      pay: vi.fn(
+        async () => new Response(JSON.stringify({ error: "insufficient_funds" }), { status: 402 }),
+      ) as unknown as typeof fetch,
+    });
+    await expect(w.check(`0x${"a".repeat(40)}`)).rejects.toBeInstanceOf(PaymentRefused);
+    expect(readXMentions(db, `0x${"a".repeat(40)}`)).toBeNull();
+    expect(w.queue(1)).toEqual([`0x${"a".repeat(40)}`]);
   });
 
   it("stops at the daily budget without recording a result", async () => {
