@@ -1,0 +1,88 @@
+.wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.lead {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.bad {
+  color: var(--negative);
+  font-weight: 600;
+}
+
+.posts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--app-ground);
+}
+
+/* A post with warning words from an established account stands out; the rest stay quiet. */
+.postBad {
+  box-shadow: inset 3px 0 0 var(--negative);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 0.8125rem;
+}
+
+.author {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.author:hover {
+  text-decoration: underline;
+}
+
+.tick {
+  color: var(--ink);
+  font-size: 0.75rem;
+}
+
+.text {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.open {
+  justify-self: start;
+  font-size: 0.8125rem;
+}
+
+.more summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.foot {
+  font-size: 0.8125rem;
+  color: var(--app-muted);
+  line-height: 1.5;
+}

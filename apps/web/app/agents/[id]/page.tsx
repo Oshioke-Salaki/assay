@@ -7,8 +7,10 @@ import { AssayBar } from "@/components/AssayBar";
 import styles from "@/components/app.module.css";
 import { Hallmark } from "@/components/Hallmark";
 import { ReviewForm } from "@/components/wallet/ReviewForm";
+import { XPanel } from "@/components/XPanel";
 import { type AgentResponse, ApiError, api } from "@/lib/api";
 import { addressUrl, date, int, short, txUrl, usd } from "@/lib/format";
+import { xReason } from "@/lib/x";
 
 export const revalidate = 30;
 
@@ -40,8 +42,11 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       </AppShell>
     );
   }
-  const { agent, assessment: a, reviews } = d;
-  const check = verdictFor(a);
+  const { agent, assessment: a, reviews, x } = d;
+  const ledgerCheck = verdictFor(a);
+  // What X says is added to the reasons, never to the verdict.
+  const xLine = xReason(x);
+  const check = xLine ? { ...ledgerCheck, reasons: [...ledgerCheck.reasons, xLine] } : ledgerCheck;
   const live = reviews.filter((r) => !r.revoked);
   const paid = live.filter((r) => r.tier !== "unverified");
   const avg = (rs: typeof live) => (rs.length ? rs.reduce((n, r) => n + r.value, 0) / rs.length : null);
@@ -134,6 +139,10 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
             {agent.description}
           </p>
         ) : null}
+      </Panel>
+
+      <Panel title="What X says about its wallet" span={12} id="x">
+        <XPanel mentions={x} address={wallet} isSeller={a.seller.grossUsd > 0} />
       </Panel>
 
       <Panel title="Reviews" span={12} action={<span className={styles.muted}>{int(live.length)} live</span>}>

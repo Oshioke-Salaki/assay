@@ -52,8 +52,17 @@ const schema = z.object({
    * 2000 calls) for the enrichment reads that the free public RPC throttles. Unset: forno.
    */
   BUY_PAYER_KEY: optional(privateKey),
-  BUY_CHAINSTACK_URL: z.string().url().default("https://gateway.usebuy.ai/chainstack/celo"),
   BUY_DAILY_CAP_USD: z.coerce.number().min(0).max(100).default(1),
+  /** X searches through buy: what the public says about each seller. Off when 0. */
+  X_MENTIONS_DAILY_CAP_USD: z.coerce.number().min(0).max(100).default(0.5),
+  X_MENTIONS_MIN_GROSS_USD: z.coerce.number().min(0).default(1),
+  BUY_X_SEARCH_URL: z.string().url().default("https://gateway.usebuy.ai/v1/social/x/posts/search"),
+  /** Where the buy gateway is paid; the ledger is reconciled against transfers to it. */
+  BUY_GATEWAY_PAY_TO: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .transform((s) => s.toLowerCase() as `0x${string}`)
+    .default("0x20faaca5f980e29639a0fcc6dca6988e18ed333b"),
 
   /** Assay's own ERC-8004 agent id, once registered. */
   AGENT_ID: optional(z.string().regex(/^\d+$/)),

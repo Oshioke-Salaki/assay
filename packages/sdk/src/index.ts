@@ -31,17 +31,55 @@ export class AssayError extends Error {
   }
 }
 
+export interface XPost {
+  id: string;
+  url: string;
+  author: string;
+  followers: number | null;
+  verified: boolean;
+  postedAt: number | null;
+  text: string;
+  excerpt: string;
+  /** Names the address next to a word like scam, rug, drainer, phishing, hack or stolen. */
+  warning: boolean;
+  /** From an account under 30 days old or with under 25 followers. */
+  weak: boolean;
+  /** Same text as a post above it. */
+  copy: boolean;
+}
+
+/**
+ * What X says about an address, from Assay's weekly paid searches. Evidence for a reader, never
+ * part of the score: anyone can post about any address.
+ */
+export interface XMentions {
+  checkedAt: number;
+  status: "ok" | "error";
+  mentions: number;
+  /** Distinct posts from established accounts naming the address next to warning words. */
+  warnings: number;
+  weakWarnings: number;
+  posts: XPost[];
+  searchUrl: string;
+  /** Settlement of the payment for this search. */
+  tx: string | null;
+}
+
 export interface AddressReport {
   asOf: number;
   check: CheckResult;
   // The full assessment is typed loosely here; see assayscore-core's Assessment.
   assessment: Record<string, unknown> & { rating: Rating; score: number | null };
   agents: unknown[];
+  /** Null until Assay has searched X for this address. */
+  x?: XMentions | null;
 }
 
 export interface PaidCheck extends CheckResult {
   asOf: number;
   attestation: Attestation | null;
+  /** What X says, in brief; a paid check on an address not yet searched queues one. */
+  x?: Pick<XMentions, "checkedAt" | "mentions" | "warnings" | "weakWarnings" | "searchUrl"> | null;
 }
 
 export interface Attestation {

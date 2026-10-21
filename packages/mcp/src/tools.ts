@@ -22,7 +22,7 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
     {
       title: "Check an x402 seller before paying",
       description:
-        "Returns pass, caution or block for a Celo address, with its Assay rating, organic revenue share and reasons. Call this before paying an unfamiliar x402 seller.",
+        "Returns pass, caution or block for a Celo address, with its Assay rating, organic revenue share and reasons, plus what X says about the address (posts naming it, and how many use words like scam or hack). Call this before paying an unfamiliar x402 seller.",
       inputSchema: { address },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -30,7 +30,19 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
       try {
         if (opts.paid) return ok(await assay.check(a));
         const report = await assay.address(a);
-        return ok(report.check);
+        const x = report.x;
+        return ok({
+          ...report.check,
+          x: x
+            ? {
+                searched: new Date(x.checkedAt * 1000).toISOString().slice(0, 10),
+                mentions: x.mentions,
+                warnings: x.warnings,
+                posts: x.posts.slice(0, 3).map((p) => ({ url: p.url, author: p.author, warning: p.warning })),
+                searchUrl: x.searchUrl,
+              }
+            : "not searched yet",
+        });
       } catch (err) {
         return fail(err);
       }

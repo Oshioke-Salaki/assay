@@ -6,6 +6,7 @@ import { createApp } from "../src/api/app.js";
 import { fiatUnits } from "../src/api/paid.js";
 import { Attester } from "../src/attest.js";
 import type { DB } from "../src/db.js";
+import { XMentionsWatcher } from "../src/enrich/xmentions.js";
 import { SettlementIndexer } from "../src/indexer/settlements.js";
 import { FIXTURE_BLOCKS, fakeSqd, fixedFx, memoryDb, testEnv } from "./helpers.js";
 
@@ -285,6 +286,53 @@ describe("response cache", () => {
     const again = await get(app, "/v1/agents/999999");
     expect(again.status).toBe(404);
     expect(again.headers.get("x-cache")).toBeNull();
+  });
+});
+
+describe("X mentions", () => {
+  it("shows what X says on the report and in the check's reasons, without touching the score", async () => {
+    const { app, db, analysis } = build();
+    const before = (await (await get(app, `/v1/address/${SHOP}`)).json()) as {
+      x: unknown;
+      check: { reasons: string[]; rating: string; verdict: string };
+      assessment: { score: number | null };
+    };
+    expect(before.x).toBeNull();
+    const timeline = [
+      {
+        type: "tweet",
+        tweet_id: "7",
+        screen_name: "watcher",
+        created_at: "Mon Oct 20 10:00:00 +0000 2026",
+        text: `Careful: ${SHOP} is a scam, it never delivers`,
+        entities: { urls: [] },
+        user_info: {
+          screen_name: "watcher",
+          created_at: "Sat Jan 29 01:21:15 +0000 2022",
+          followers_count: 4000,
+        },
+      },
+    ];
+    await new XMentionsWatcher(db, {
+      pay: (async () =>
+        new Response(JSON.stringify({ transaction: null, output: { status: "ok", timeline } }), {
+          status: 200,
+        })) as unknown as typeof fetch,
+      onChange: () => analysis.invalidate(),
+    }).check(SHOP as `0x${string}`);
+    const after = (await (await get(app, `/v1/address/${SHOP}`)).json()) as typeof before & {
+      x: { mentions: number; warnings: number; posts: { url: string }[]; searchUrl: string };
+    };
+    expect(after.x).toMatchObject({ mentions: 1, warnings: 1 });
+    expect(after.x.posts[0]?.url).toBe("https://x.com/watcher/status/7");
+    expect(after.x.searchUrl).toContain("x.com/search");
+    expect(after.check.reasons.at(-1)).toBe(
+      "1 post on X names this address next to words like scam or hack; read it before paying",
+    );
+    // Evidence, not input: the verdict, rating and score are what the ledger says.
+    expect(after.check.verdict).toBe(before.check.verdict);
+    expect(after.check.rating).toBe(before.check.rating);
+    expect(after.assessment.score).toBe(before.assessment.score);
   });
 });
 

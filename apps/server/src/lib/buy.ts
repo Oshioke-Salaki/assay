@@ -1,17 +1,10 @@
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { ExactEvmSchemeV1 } from "@x402/evm/v1";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
-import type { Hex } from "viem";
+import { type Address, type Hex, parseAbiItem } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import type { DB } from "../db.js";
+import { type DB, getCursor, setCursor } from "../db.js";
 import { log } from "./log.js";
-
-/**
- * Multicall chunking for the paid gateway. viem's `batchSize` counts raw calldata bytes; ABI and hex
- * encoding inflate that about 12x in the JSON body. 4 KB of calldata comes to about 50 KB per request,
- * under the gateway's 128 KiB cap with room to spare (test/buy.test.ts measures it).
- */
-export const PAID_MULTICALL_BATCH = 4 * 1024;
 
 export class BudgetExceeded extends Error {
   constructor(spent: number, cap: number) {
@@ -66,8 +59,10 @@ export function createPayingFetch(opts: {
     const since = Math.floor(Date.now() / 86_400_000) * 86_400;
     return (
       opts.db
-        .prepare("SELECT COALESCE(SUM(usd), 0) AS s FROM paid_calls WHERE ts >= ? AND tx_hash IS NOT NULL")
-        .get(since) as {
+        .prepare(
+          "SELECT COALESCE(SUM(usd), 0) AS s FROM paid_calls WHERE ts >= ? AND tx_hash IS NOT NULL AND service = ?",
+        )
+        .get(since, opts.service) as {
         s: number;
       }
     ).s;
@@ -139,4 +134,83 @@ export function readSettlementTx(res: Response): string | null {
   } catch {
     return null;
   }
+}
+
+export interface ReconcileReader {
+  getBlockNumber(): Promise<bigint>;
+  getLogs(args: {
+    address: Address;
+    event: typeof TRANSFER_EVENT;
+    args: { from: Address; to: Address };
+    fromBlock: bigint;
+    toBlock: bigint;
+  }): Promise<{ transactionHash: Hex | null; blockNumber: bigint | null; args: { value?: bigint } }[]>;
+  getBlock(args: { blockNumber: bigint }): Promise<{ timestamp: bigint }>;
+}
+
+const TRANSFER_EVENT = parseAbiItem(
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+);
+const RECONCILE_CURSOR = "paid_calls_reconcile";
+
+/**
+ * Makes the ledger match the chain. A paid call can settle and still lose its answer (the gateway
+ * resets the connection after taking payment), which leaves a row with no transaction and a spend
+ * the daily cap never saw. This reads every token transfer from Assay's wallet to the gateway and
+ * attaches each one to the call it paid for, or records it on its own when no call matches.
+ */
+export async function reconcilePaidCalls(
+  db: DB,
+  rpc: ReconcileReader,
+  opts: { payer: Address; payTo: Address; token: Address; decimals: number; lookbackBlocks?: number },
+): Promise<{ matched: number; unmatched: number; scannedTo: bigint }> {
+  // A few blocks behind the tip, so a transfer is seen once and not reorged away.
+  const tip = (await rpc.getBlockNumber()) - 5n;
+  const cursor = getCursor(db, RECONCILE_CURSOR);
+  let from = cursor === null ? tip - BigInt(opts.lookbackBlocks ?? 7_200) : BigInt(cursor) + 1n;
+  let matched = 0;
+  let unmatched = 0;
+  const known = db.prepare("SELECT 1 FROM paid_calls WHERE tx_hash = ?");
+  // The failed call that a payment belongs to was recorded at most ten minutes after it settled.
+  const candidate = db.prepare(
+    `SELECT id FROM paid_calls WHERE tx_hash IS NULL AND payer = ? AND ts BETWEEN ? AND ?
+     ORDER BY ABS(ts - ?) LIMIT 1`,
+  );
+  const attach = db.prepare(
+    "UPDATE paid_calls SET tx_hash = ?, usd = ?, note = COALESCE(note, '') || ' (settled onchain; answer lost)' WHERE id = ?",
+  );
+  const orphan = db.prepare(
+    "INSERT INTO paid_calls (ts, service, url, status, usd, tx_hash, payer, note) VALUES (?, 'unmatched', '', 0, ?, ?, ?, 'payment found onchain with no recorded call')",
+  );
+  while (from <= tip) {
+    const to = from + 1_999n < tip ? from + 1_999n : tip;
+    const logs = await rpc.getLogs({
+      address: opts.token,
+      event: TRANSFER_EVENT,
+      args: { from: opts.payer, to: opts.payTo },
+      fromBlock: from,
+      toBlock: to,
+    });
+    for (const l of logs) {
+      if (!l.transactionHash || l.blockNumber === null) continue;
+      const tx = l.transactionHash.toLowerCase();
+      if (known.get(tx)) continue;
+      const ts = Number((await rpc.getBlock({ blockNumber: l.blockNumber })).timestamp);
+      const usd = Number(l.args.value ?? 0n) / 10 ** opts.decimals;
+      const row = candidate.get(opts.payer.toLowerCase(), ts - 60, ts + 600, ts) as
+        | { id: number }
+        | undefined;
+      if (row) {
+        attach.run(tx, usd, row.id);
+        matched++;
+      } else {
+        orphan.run(ts, usd, tx, opts.payer.toLowerCase());
+        unmatched++;
+      }
+    }
+    setCursor(db, RECONCILE_CURSOR, Number(to), null);
+    from = to + 1n;
+  }
+  if (matched + unmatched > 0) log.warn("paid calls reconciled", { matched, unmatched });
+  return { matched, unmatched, scannedTo: tip };
 }

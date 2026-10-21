@@ -3,7 +3,7 @@
 ```
                  Celo mainnet (finalized blocks)
                               │
-            SQD Portal stream │   SQD funding scan · Blockscout · Celo RPC · Chainstack via buy (x402)
+            SQD Portal stream │   SQD funding scan · Blockscout · Celo RPC · X search via buy (x402)
                               ▼                              │
 ┌─────────────────────────────────────────────────────────────┴───────────┐
 │ apps/server                                                              │
@@ -30,9 +30,10 @@
 
 1. **Settlements.** The indexer asks the SQD Portal for finalized Celo blocks containing an `AuthorizationUsed` event on USDC, USD₮ or USA₮, or a call to the x402 Permit2 proxy. `indexer/extract.ts` turns each matching transaction into settlements: a supported-token `Transfer` that the payer authorised and someone else submitted. Self-submitted authorisations, failed transactions, zero amounts and unauthorised transfers in the same transaction are skipped. Rows are written idempotently (`INSERT OR IGNORE` on transaction hash and log index) together with a per-day roll-up, `pair_days`, and the cursor, in one SQLite transaction per batch. Only blocks the portal actually sent move the cursor, so an early end of stream never skips a block.
 2. **ERC-8004.** A second stream reads `Registered`, `URIUpdated`, `MetadataSet(agentWallet)` and `Transfer` from the Identity Registry and `NewFeedback` / `FeedbackRevoked` from the Reputation Registry. Feedback files stored inline as `data:` URIs are parsed for `proofOfPayment`.
-3. **Enrichment.** A background worker finds each payer's and seller's first funder (the first inbound CELO, Mento stablecoin or x402 token transfer from someone else). One forward pass over SQD logs settles up to 500 addresses at once: about 24 minutes for all of Celo history, and the filter shrinks as addresses settle. Blockscout looks up, one address at a time, whatever the scan cannot find (funding newer than the portal's finalized head), since its keyless API allows only about ten requests in a 26-minute window, classifies funders as public sources (contracts or very busy wallets, and never an x402 participant), looks up Self Agent IDs and human nullifiers by multicall, and fetches agent registration files through an SSRF-safe fetcher. Work is ordered by x402 volume so the busiest sellers are finished first.
-4. **Analysis.** `packages/core` builds the payment graph, finds strongly connected components and assesses any address on demand (see [METHODOLOGY.md](METHODOLOGY.md)).
-5. **Serving.** Free routes return reports; paid routes sit behind `@x402/hono` and the Celo facilitator; each paid answer carries a signed EIP-712 score.
+3. **Enrichment.** A background worker finds each payer's and seller's first funder (the first inbound CELO, Mento stablecoin or x402 token transfer from someone else). One forward pass over SQD logs settles up to 500 addresses at once: about 24 minutes for all of Celo history, and the filter shrinks as addresses settle. Blockscout looks up, one address at a time, whatever the scan cannot find (funding newer than the portal's finalized head), since its keyless API allows only about ten requests in a 26-minute window, classifies funders as public sources (contracts or very busy wallets, and never an x402 participant), looks up Self Agent IDs and human nullifiers by multicall over Celo RPC, and fetches agent registration files through an SSRF-safe fetcher. Work is ordered by x402 volume so the busiest sellers are finished first.
+4. **Public mentions.** `enrich/xmentions.ts` searches X for each seller's exact address through the buy gateway's X search: one $0.005 x402 payment per address, from the agent wallet, under its own daily cap. Addresses agents paid to check go first, then reports people opened, then sellers by revenue. Each address is searched again weekly. A payment whose answer was lost to a dropped connection is found onchain by the reconciler (`reconcilePaidCalls`), which matches every USDC transfer from the agent wallet to the gateway against the ledger. The results are evidence and never enter the score.
+5. **Analysis.** `packages/core` builds the payment graph, finds strongly connected components and assesses any address on demand (see [METHODOLOGY.md](METHODOLOGY.md)).
+6. **Serving.** Free routes return reports; paid routes sit behind `@x402/hono` and the Celo facilitator; each paid answer carries a signed EIP-712 score.
 
 ## Why these choices
 

@@ -43,6 +43,57 @@ describe("Assay MCP tools", () => {
     expect(String((f.mock.calls[0] as unknown[])[0])).toBe(`https://assay.test/v1/address/${SELLER}`);
   });
 
+  it("includes what X says, or says it has not been searched", async () => {
+    const x = {
+      checkedAt: 1_792_000_000,
+      status: "ok",
+      mentions: 2,
+      warnings: 1,
+      weakWarnings: 0,
+      posts: [
+        { url: "https://x.com/a/status/1", author: "a", warning: true },
+        { url: "https://x.com/b/status/2", author: "b", warning: false },
+      ],
+      searchUrl: "https://x.com/search?q=x",
+      tx: null,
+    };
+    const reply = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body)));
+    const withX = await connect(
+      reply({
+        check: { verdict: "caution", rating: "BB", reasons: ["1 post on X names this address"] },
+        x,
+      }) as unknown as typeof fetch,
+    );
+    const a = JSON.parse(
+      (
+        (await withX.callTool({ name: "assay_check_seller", arguments: { address: SELLER } })).content as {
+          text: string;
+        }[]
+      )[0]!.text,
+    );
+    expect(a.x).toEqual({
+      searched: "2026-10-14",
+      mentions: 2,
+      warnings: 1,
+      posts: [
+        { url: "https://x.com/a/status/1", author: "a", warning: true },
+        { url: "https://x.com/b/status/2", author: "b", warning: false },
+      ],
+      searchUrl: "https://x.com/search?q=x",
+    });
+    const without = await connect(
+      reply({ check: { verdict: "pass", rating: "A", reasons: [] }, x: null }) as unknown as typeof fetch,
+    );
+    const b = JSON.parse(
+      (
+        (await without.callTool({ name: "assay_check_seller", arguments: { address: SELLER } })).content as {
+          text: string;
+        }[]
+      )[0]!.text,
+    );
+    expect(b.x).toBe("not searched yet");
+  });
+
   it("rejects bad addresses before calling Assay", async () => {
     const f = vi.fn();
     const client = await connect(f as unknown as typeof fetch);

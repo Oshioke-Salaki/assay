@@ -29,19 +29,53 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 
 | Route | Returns |
 | --- | --- |
-| `GET /v1/address/:address` | `assessment` (payer lines up to 100), `check`, `agents` |
+| `GET /v1/address/:address` | `assessment` (payer lines up to 100), `check`, `agents`, `x` (what X says, or `null` before the first search) |
+| `GET /v1/address/:address/payers?limit=20&offset=0&q=&class=` | one page of who paid it, searchable, filterable by class, with counts |
+| `GET /v1/address/:address/counterparties?limit=20&offset=0&q=&loop=1` | one page of who it paid |
 | `GET /v1/economy` | totals: gross, organic, loop offset, self-funded, settlements, sellers, payers, loops, rating counts, review stats, top sellers |
 | `GET /v1/economy/daily?days=120` | `points[]`: day (days since epoch), grossUsd, organicUsd, settlements |
 | `GET /v1/sellers?limit=50&offset=0&sort=organic\|gross&rating=A` | every seller with rating and revenue |
 | `GET /v1/agents?q=&limit=30&offset=0&paid=1` | ERC-8004 agents ranked by reviews from paying wallets, then revenue |
-| `GET /v1/agents/:id` | `agent`, `assessment` of its wallet, `check`, `reviews` with tiers |
+| `GET /v1/agents/:id` | `agent`, `assessment` of its wallet, `check`, `reviews` with tiers, `x` for its wallet |
 | `GET /v1/agents/:id/payments/:client` | a client's settlements to the agent, and whether the client owns it |
 | `GET /v1/proof/:tx` | a live check of one transaction: `{ ok, status, settlements }` |
 | `GET /v1/status` | indexed blocks, lag, relayers, paid services used, attester, registry |
-| `GET /v1/paid-calls` | every call Assay paid another service for, with its settlement transaction |
+| `GET /v1/paid-calls` | every call Assay paid another service for, with its settlement transaction. Reconciled against the chain every five minutes, so a payment whose answer was lost still appears |
 | `GET /v1/methodology` | version, thin-file thresholds, rating floors, prices |
 | `GET /.well-known/agent-registration.json` | Assay's ERC-8004 registration file |
 | `GET /health` | `{ ok: true }` |
+
+## What X says (`x`)
+
+```json
+{
+  "checkedAt": 1792602807,
+  "status": "ok",
+  "mentions": 16,
+  "warnings": 1,
+  "weakWarnings": 0,
+  "posts": [
+    {
+      "url": "https://x.com/…/status/…",
+      "author": "…",
+      "followers": 343,
+      "verified": true,
+      "postedAt": 1701566005,
+      "excerpt": "…got scammed and drained … 0xd8dA…",
+      "warning": true,
+      "weak": false,
+      "copy": false
+    }
+  ],
+  "searchUrl": "https://x.com/search?q=…",
+  "tx": "0x…"
+}
+```
+
+- `warnings` counts distinct posts from established accounts that name the address next to a warning word. `weakWarnings` counts the same from new or small accounts.
+- `tx` is the buy payment that paid for this search.
+- `x` never changes `assessment`, `score`, `rating` or `verdict`. When there are warnings, the check's `reasons` gain one sentence. See [METHODOLOGY.md](METHODOLOGY.md#what-x-says).
+- A paid `/v1/check` returns a brief `x` (counts and `searchUrl`). On an address not yet searched, it queues a search.
 
 ## Assessment shape (abridged)
 

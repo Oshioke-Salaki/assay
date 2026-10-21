@@ -81,11 +81,47 @@ export type TrimmedAssessment = Assessment & {
   buyer: Assessment["buyer"] & { counterpartiesTruncated: boolean };
 };
 
+export interface XPost {
+  id: string;
+  url: string;
+  author: string;
+  authorName: string | null;
+  followers: number | null;
+  verified: boolean;
+  postedAt: number | null;
+  text: string;
+  /** The part around the address; absent on results stored before excerpts existed. */
+  excerpt?: string;
+  likes: number;
+  reposts: number;
+  namesAddress: boolean;
+  warning: boolean;
+  weak: boolean;
+  /** Same text as a post above it (pasted spam), counted once. */
+  copy?: boolean;
+}
+
+/** What X says about an address, from Assay's paid searches through buy. Evidence, never scored. */
+export interface XMentions {
+  address: Address;
+  checkedAt: number;
+  status: "ok" | "error";
+  mentions: number;
+  warnings: number;
+  weakWarnings: number;
+  posts: XPost[];
+  searchUrl: string;
+  tx: string | null;
+  error?: string;
+}
+
 export interface AddressResponse {
   asOf: number;
   assessment: TrimmedAssessment;
   check: CheckResult;
   agents: AgentRow[];
+  /** Absent on servers older than the X search; null when not searched yet. */
+  x?: XMentions | null;
 }
 
 export interface AgentResponse {
@@ -93,6 +129,7 @@ export interface AgentResponse {
   assessment: TrimmedAssessment;
   check: CheckResult;
   reviews: ReviewRow[];
+  x?: XMentions | null;
 }
 
 export interface Status {

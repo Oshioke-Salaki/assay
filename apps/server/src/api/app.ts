@@ -22,6 +22,7 @@ import type { Analysis } from "../analysis.js";
 import type { Attester } from "../attest.js";
 import type { DB } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
+import { readXMentions, wantXMentions, X_REFRESH, type XMentions, xReason } from "../enrich/xmentions.js";
 import type { Env } from "../env.js";
 import { log } from "../lib/log.js";
 import { proveSettlement } from "../proof.js";
@@ -88,6 +89,22 @@ export function createApp(deps: AppDeps): Hono {
   app.use("*", paidMiddleware(env, { syncOnStart: deps.syncFacilitatorOnStart ?? true, fx: deps.fx }));
 
   const free = rateLimit(env.FREE_RATE_PER_MIN, env.INTERNAL_API_KEY);
+
+  /**
+   * Queue an X search for an address someone asked about, when it has none or a stale one. A paid
+   * check always counts; a free view counts only for a real seller, so looking up random
+   * addresses cannot spend the X budget. Never fails the request it rides on.
+   */
+  const askX = (x: XMentions | null, address: string, grossUsd: number, paid: boolean) => {
+    if (!env.BUY_PAYER_KEY || env.X_MENTIONS_DAILY_CAP_USD <= 0) return;
+    if (x && Math.floor(Date.now() / 1000) - x.checkedAt < X_REFRESH) return;
+    if (!paid && grossUsd < env.X_MENTIONS_MIN_GROSS_USD) return;
+    try {
+      wantXMentions(deps.db, address, paid);
+    } catch (err) {
+      log.warn("x mentions queue failed", { address, error: String(err) });
+    }
+  };
   const cached = snapshotCache(() => analysis.current().builtAt, 4_000);
 
   app.get("/", (c) =>
@@ -196,11 +213,14 @@ export function createApp(deps: AppDeps): Hono {
     if (!isAddress(raw)) return badAddress(c);
     const address = normalizeAddress(raw);
     const a = analysis.assess(address);
+    const x = readXMentions(deps.db, address);
+    askX(x, address, a.seller.grossUsd, false);
     return c.json({
       asOf: analysis.current().builtAt,
       assessment: trimAssessment(a),
-      check: verdictFor(a),
+      check: withX(verdictFor(a), x),
       agents: analysis.agentsFor(address),
+      x,
     });
   });
 
@@ -260,11 +280,14 @@ export function createApp(deps: AppDeps): Hono {
     if (!agent) return c.json({ error: "not_found", message: `No ERC-8004 agent #${id} on Celo.` }, 404);
     const wallet = (agent.wallet ?? agent.owner) as Address;
     const a = analysis.assess(wallet);
+    const x = readXMentions(deps.db, wallet);
+    askX(x, wallet, a.seller.grossUsd, false);
     return c.json({
       agent,
       assessment: trimAssessment(a),
-      check: verdictFor(a),
+      check: withX(verdictFor(a), x),
       reviews: analysis.reviews(id),
+      x,
     });
   });
 
@@ -302,18 +325,34 @@ export function createApp(deps: AppDeps): Hono {
     const address = normalizeAddress(c.req.param("address"));
     const a = analysis.assess(address);
     const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
-    return c.json({ ...verdictFor(a), asOf: analysis.current().builtAt, attestation });
+    const x = readXMentions(deps.db, address);
+    askX(x, address, a.seller.grossUsd, true);
+    return c.json({
+      ...withX(verdictFor(a), x),
+      x: x && {
+        checkedAt: x.checkedAt,
+        mentions: x.mentions,
+        warnings: x.warnings,
+        weakWarnings: x.weakWarnings,
+        searchUrl: x.searchUrl,
+      },
+      asOf: analysis.current().builtAt,
+      attestation,
+    });
   });
 
   app.get("/v1/attest/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
     const a = analysis.assess(address);
     const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
+    const x = readXMentions(deps.db, address);
+    askX(x, address, a.seller.grossUsd, true);
     return c.json({
       asOf: analysis.current().builtAt,
       assessment: trimAssessment(a, 500),
-      check: verdictFor(a),
+      check: withX(verdictFor(a), x),
       agents: analysis.agentsFor(address),
+      x,
       attestation,
     });
   });
@@ -352,7 +391,7 @@ export function createApp(deps: AppDeps): Hono {
         { name: "x402-attest", endpoint: `${env.PUBLIC_URL}/v1/attest/{address}`, version: "1" },
         {
           name: "MCP",
-          endpoint: "https://github.com/Oshioke-Salaki/assay/tree/main/packages/mcp",
+          endpoint: "https://www.npmjs.com/package/assayscore-mcp",
           version: "1",
         },
       ],
@@ -415,6 +454,15 @@ function usd(micros: bigint): string {
  * blocks rebuild the snapshot every entry is dropped, so nothing stale is ever served. Bounded,
  * oldest entries evicted first. Only 200 answers are kept.
  */
+/**
+ * Add what X says to a check's reasons. The verdict and rating stay the ledger's: a post cannot
+ * move a score, but a reader deciding whether to pay should know people are warning about it.
+ */
+function withX<T extends { reasons: string[] }>(check: T, x: XMentions | null): T {
+  const line = xReason(x);
+  return line ? { ...check, reasons: [...check.reasons, line] } : check;
+}
+
 export function snapshotCache(version: () => number, maxEntries: number): MiddlewareHandler {
   const store = new Map<string, { body: string; type: string }>();
   let current = -1;

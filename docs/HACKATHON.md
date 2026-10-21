@@ -13,7 +13,7 @@
 ## Tracks
 
 - **USA₮ with x402.** Checks ($0.002) and attestations ($0.01) settle through Celo's facilitator in USD₮ by default, with USA₮, USDC and Ripio wARS, wBRL and wCOP also accepted. Counterparties are other teams' agents and sellers. Checking happens before every payment, so the same counterparty pays again and again. USA₮ fits because the buyers are agents settling dollar-priced machine payments under a US-regulated dollar, gasless through x402.
-- **Build with buy.** Assay's enrichment reads Self Agent IDs by multicall through Chainstack's Celo RPC, paid over x402 through the buy gateway ($0.01 per batch of up to 2,000 calls), from the agent wallet, capped per day. Every paid call is logged with its settlement transaction at `/v1/paid-calls`.
+- **Build with buy.** Assay buys X searches through the buy gateway ($0.005 each, x402 from the agent wallet) to show what the public says about every seller, its own daily cap, busiest and most-asked-about first. Every payment is in `/v1/paid-calls` with its transaction, reconciled against the chain.
 
 ## Where users and volume come from
 

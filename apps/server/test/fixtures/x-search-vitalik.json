@@ -1,0 +1,381 @@
+{
+ "capability": "x.posts.search",
+ "transaction": "0x718f6a1343f8d97bc8d0a06c9b4c2fcf4c0c8f0f143737bf514da275b8e30d05",
+ "payment": {
+  "token": "USDC",
+  "asset": "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+  "atomic": "5000",
+  "usd": "0.005"
+ },
+ "provider": "tikhub",
+ "resultCount": 1,
+ "output": {
+  "status": "ok",
+  "timeline": [
+   {
+    "type": "tweet",
+    "tweet_id": "1725077567575580895",
+    "screen_name": "larry0x",
+    "created_at": "Thu Nov 16 09:05:17 +0000 2023",
+    "text": "Basic blockchain knowledge: how does wallet apps derive your address from your seed phrase?\n\nThis is a rather complex process, involving many steps, summarized in the diagram below:\n\n#1 --> #2\n\n1st step is to convert your human-readable seed phrase aka mnemonic phrase (#1 in the diagram) into a raw binary seed (#2), aka entropy. The standardized algorithm for this conversion is Bitcoin Improvement Proposal (BIP)-39: https://t.co/xYaMRV4tYo. Despite the \"bitcoin\" in the name, this standard is adopted by all other chains as well.\n\n#2 --> #3\n\nNext we derive the private/public key pair (#3) from the seed. The algorithm for this is defined by BIP-32: https://t.co/T9UmoOQTSl\n\nHere it gets a bit complicated. The BIP-32 algorithm takes 2 parameters: the seed, and another thing called the derivation path. The idea is that people may have multiple wallets for different purposes, but they probably don't want to keep record of many seed phrases. BIP-32 allows users to use only one seed, but combine it with various derivation paths to generate different wallet addresses.\n\nThe specific format of derivation path is standardized by yet another BIP, BIP-44 (https://t.co/XLrs6JTB8C). It looks like this:\n\nm / purpose' / coin_type' / account' / change / address_index\n\nThe two fields that are worth mentioning are coin_type and address_index. The latter is easy to understand-- your first address uses index 0, the 2nd uses 1, so on. When you click \"Add account\" in MetaMask to generate a new address, what it does behind the scene is to increment the value of this address_index.\n\ncoin_type is where it gets a bit controversial, at least within the Cosmos ecosystem. This parameter designates which chain the account is intended for. Satoshi Labs, the creator of Trezor wallet, maintains a registry called SLIP-0044 (https://t.co/IlxxFRMQPP) that allocates a number for each chain. Bitcoin gets coin_type 0, Litecoin gets 2, Dogecoin 3, Ethereum 60, so on.\n\nThe controversial part is that deriving a different address for each chain may create problems for user experience. There has been a debate on whether all Cosmos chains should use the same coin_type, 118, that of Cosmos Hub. Another opinion is that Cosmos chains should just align with Ethereum and use 60. Let's not go too deep into the rabbit hole for now.\n\n#3 --> #4\n\nNow we derive the address in its raw binary form (#4) from the public key. This is where it gets really messy. Unlike the previous steps which are well standardized, here each chain has its own methodology. To name a few:\n\nBitcoin\naddress := ripemd160(sha256(pubkey))\n\nEthereum\naddress := keccak256(pubkey)[-20:]\n\nCosmos\naddress := sha256(sha256(typ) || pubkey) **1\n\nSui\naddress := blake2b256(flag || pubkey) **2\n\nHere sha256, ripemd160, keccak256, and blake2b256 are all cryptographic hash functions.\n\n**1 `typ` is a string designating the pubkey type. Typically the Protobuf typeURL is used. See: https://t.co/J43G9kHg0J\n\n**2 `flag` is a single byte that designates which ECDSA curve the account uses. See: https://t.co/LtTZNQvNtC\n\n#4 --> #5\n\nOur address is now in its raw binary form, meaning a few hundred 0s and 1s. The final step is to encode it to a human-readable form.\n\nHere's another place where chains take different approaches. There're 3 encoding schemes used:\n\n- bech32: Bitcoin and Cosmos\n- hex: Ethereum, Aptos, Sui\n- base58: Solana\n\nWhat we should know is that the encoding schemes are just for the ease-of-use by humans. Blockchains operates on raw binaries and don't care how humans encode them. The very same address can look totally different when encoded in various schemes but its underlying bytes are unchanged. For example, this is the hex-encoded address for vitalik.eth:\n\n0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n\nThis is the very same address in Bech32 encoding:\n\ncosmos1mrdxhunfvjhe6lhdncp72dq46da2jcz9d9sh93\n\nIn base58:\n\n42E5f5XLWJkBaQc3DdthcgUycdYQ\n\nImplementation\n\nI have a Rust code snippet for deriving the address (using Bitcoin's approach and bech32 encoding) for those who're interested: https://t.co/i6p8u5dWHU\n\n-------------------\n\nThat's it! Thanks for tuning in to my lecture. Let's summarize the nerd words you learned today so that you can show off to your friends:\n- BIP-32\n- BIP-39\n- BIP-44\n- SLIP-0044\n- coin_type\n- account_index\n- bech32\n- base58\n- hex",
+    "favorites": 156,
+    "retweets": 23,
+    "views": "31515",
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki"
+      },
+      {
+       "expanded_url": "https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki"
+      },
+      {
+       "expanded_url": "https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki"
+      },
+      {
+       "expanded_url": "https://github.com/satoshilabs/slips/blob/master/slip-0044.md"
+      },
+      {
+       "expanded_url": "https://github.com/cosmos/cosmos-sdk/blob/555f38c1d2891e1624bfb7c8f526a483c26c1957/docs/architecture/adr-028-public-key-addresses.md"
+      },
+      {
+       "expanded_url": "https://docs.sui.io/concepts/cryptography/transaction-auth/keys-addresses"
+      },
+      {
+       "expanded_url": "https://gist.github.com/larry0x/92399bb2f9ce4b769e112ce5550091b9"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "larry0x",
+     "name": "larry_engineer",
+     "created_at": "Thu May 30 17:35:29 +0000 2019",
+     "followers_count": 39257,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "2049718642427019502",
+    "screen_name": "layerggofficial",
+    "created_at": "Thu Apr 30 05:13:00 +0000 2026",
+    "text": "What happened in Onchain in the last ~24h💾\n\n- MegaETH memecoin $FLUFFEY is up +100%\nThe meme coin $FLUFFEY (@Megaeth_Fluffey), themed after the official mascot of @MegaETH, has risen by about 100% and now has MC of $366K. @Official_Upbit and @BithumbOfficial have previously announced the listing of $MEGA.\n0x2A3a4c92ce37ABd7239fB010BC390710f4062407 (CA)\n\n- $SYND: An exploit has occurred on the Syndicate Bridge\nThe @SyndicateIo's bridge has been compromised, and the exploiter sold approximately $330K worth of $SYND.\n0x58e2e08357992bc4a4a02f22321c3e0f6b01893e (Exploiter)\n\n- Vitalik sold 40M $ASTEROID for 114k $USDC\n  As @VitalikButerin sold all the tokens he had received from the $ASTEROID deployer, the price dropped by -51% within 1 minute. After the news spread, degens started buying, pushing it up by 104% in 1h, and the MC reached a peak of $16.48M.\n\n- Vitalik is selling all the memecoins in his wallet\nAfter selling $ASTEROID, @VitalikButerin has sold approximately $68K worth of tokens across 851 tx for 28.6 $ETH, 1.46 $WETH, and 4 $DAI.\n0xd8da6bf26964af9d7eed9e03e53415d37aa96045\n\n- An exploit has occurred in Sweat Economy\nIt was reported that a leak of $SWEAT occurred from the foundation account of the M2E project Sweat. However, according to the @SweatEconomy, the balance was fully recovered with the help of @MEXC and others. The $SWEAT token only saw a minor drop of around -4%.\n3be304b2151870b2be88b9de0b80acab921337ad152584138bd852fc6e9ae018 (Exploiter, Near chain)\n\n- The Kyber Network exploiter sent 8,400 $ETH ($19.4M) to @TornadoCash\n@KyberNetwork lost $48M in November 2023 after a flaw in its Flashloan Swap Logic was exploited. The wallet now holds only 6,061 $ETH ($13.78M).\n0x4Ea83653eceA38B51730c14776698E19f5ca6e65\n0x6B686cf613F05D09C097eECFc349c091e6F2ad8D\n0xfD8a5CBed243164D1a605FacF9725559a2CDe6DD\n0x08e8cC43426AA62D3bE4C1b55183520e8c78Cf66\n0x3EBFC212ab2CBb16cbFD52e220381a85fD75D665\n\n💞 Please Like + Retweet if you enjoy this",
+    "favorites": 41,
+    "retweets": 5,
+    "views": "4554",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "layerggofficial",
+     "name": "Layergg",
+     "created_at": "Sat Mar 27 00:13:22 +0000 2021",
+     "followers_count": 123186,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1976680460819235064",
+    "screen_name": "ThatNoob_666",
+    "created_at": "Fri Oct 10 16:05:21 +0000 2025",
+    "text": "69ers Syndicate just went NUCLEAR 🚀 \n\nI just joined the fun and BLASTED X $STRAYDOG into Vitalik’s wallet - 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045.\n\nSupply’s getting nuked, the burn is real and the pack only gets stronger. 🔥🐾\n\nWhale vibes, moon intent, culture locked.🔒\n\nWho’s brave enough to match this chad energy? 🐳👇\n\nOver $10k of my personal @straydogcoin tokens burned \n\nhttps://t.co/0SS7NEude1",
+    "favorites": 46,
+    "retweets": 18,
+    "views": "4538",
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "https://etherscan.io/tx/0x3f2ea9dc276f29885311d94ad316bb0af6bcca40c01da32495d39eb7d485cfe0"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "ThatNoob_666",
+     "name": "CN",
+     "created_at": "Sat Oct 24 21:58:25 +0000 2020",
+     "followers_count": 2259,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1731119413926219841",
+    "screen_name": "HelloPc8",
+    "created_at": "Sun Dec 03 01:13:25 +0000 2023",
+    "text": "機器人測試 最終章\n（請別亂點喔）\n\n“Fuck l got scammed and drained by opensea with my MetaMask, trust wallet and @okx wallet.\nall my binance ethereum bitcoin are gone I need a lawyer crypto expert! \n0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045”\n\n訓練人工智慧關鍵在堅持！\n@Portalcoin",
+    "favorites": 12,
+    "retweets": 6,
+    "views": "9327",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "HelloPc8",
+     "name": "HelloPc",
+     "created_at": "Sat Jan 29 01:21:15 +0000 2022",
+     "followers_count": 343,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1560169626939572228",
+    "screen_name": "MA___________RK",
+    "created_at": "Thu Aug 18 07:40:00 +0000 2022",
+    "text": "How to onboard someone onto web3:\n\nTell them they don't have to use:\n0xd8da6bf26964af9d7eed9e03e53415d37aa96045\n\nThey can use:\nvitalik.eth\n\n$ens #ens #ensdomains #web3",
+    "favorites": 15,
+    "retweets": 1,
+    "views": null,
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "MA___________RK",
+     "name": "m@rk",
+     "created_at": "Fri Jul 01 19:26:30 +0000 2022",
+     "followers_count": 1887,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1964720062948073568",
+    "screen_name": "annawu01",
+    "created_at": "Sun Sep 07 15:59:00 +0000 2025",
+    "text": "Mint @shefiorg ENS username with me and explore the journey of @ensdomains: its purpose, its peak, and its path forward🐈‍⬛💫\n\n1/ Why own an ENS?\n\nTo be fair, crypto addresses look like my cat smashed the keyboard. At its heart, ENS turns those keysmashes into a user-friendly experience.\n\nIt replaces 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 with vitalik.eth.\n\nIt also taps into something ancient: the urge to belong, to be known. Like a vanity plate, but for your entire financial and social presence online.\n\n2/ What made its peak in 2021?\n\nThe legendary $ENS airdrop hit on Nov 8th, showering tokens on everyone who had an ENS name. That triggered a massive gold rush.\n\nEveryone scrambled to register names, hoping to cash in on the next big thing. For a period, ENS domains surpassed even popular collections like @BoredApeYC or @cryptopunks in terms of trading volume.\n\nThe hype faded. The builders kept building.\n\n3/ What's next?\n\nThe big upgrade ahead is ENSv2, migrating to a Layer 2 network. This promises to drastically reduce the gas fees, which have been a major barrier to entry for new users. Cheaper, faster transactions could unlock mass adoption. \n\nDeeper integrations with chains like Bitcoin and Solana would make an ENS name your true cross-chain identity. \n\nFurthermore, as more major companies and dApps build in Web3, they will need this user-friendly layer, making ENS a critical piece of internet infrastructure.\n\nFor instance, with the new @GoDaddy integration, you can link any .com domain to your ENS. It’s a direct bridge between Web2 and Web3, potentially bringing users into the ecosystem effortlessly.\n\nSo, what ENS names do you hold? Or are you still rocking 0x addresses? 👀",
+    "favorites": 10,
+    "retweets": 2,
+    "views": "595",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "annawu01",
+     "name": "Anna",
+     "created_at": "Sun Sep 06 10:20:32 +0000 2020",
+     "followers_count": 413,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1846535235334492196",
+    "screen_name": "0x01yuqi",
+    "created_at": "Wed Oct 16 12:54:41 +0000 2024",
+    "text": "小技巧分享帖：KOL地址库如何做？\n如何获取KOL，MEME名人，的ETH地址，查看监控他们的操作。\n\n首先介绍：ETH Registrar Controller 合约：\n0x253553366Da8546fC250F225fe3d25d0C782303b\n\n这是当前用于注册 .eth 域名的控制器合约，通过这个合约，用户可以进行域名注册和续约操作。\n白话文理解一点就是：买域名就是用这个地址买的，所以你可以查询一下这些地址是哪些人，参与交互的地址都是带ens的地址。\n\n我们都知道 Vitalik Buterin的公开以太坊地址是：0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n查询通过web3本身有ens方法，直接 https://t.co/qFm3qjg748(address)就能获取ens名称w3.ens.get_text(ens_name, twitter_key)就能获取ens名称下面的推特用户名\n\naddress：0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 ENS：vitalik.eth twitter: @VitalikButerin\n你让chatgpt都能给你写一段代码获取某个地址所绑定的推特。\n\n所以想获取KOL或者MEME名人地址，首先你就得有一个近期链上活跃的交易地址库：\n1.可以从注册ENS交互的地址 0x253553366Da8546fC250F225fe3d25d0C782303b 里面去导出\n2.可以去 dexscreener 等看线网址 把所有的土狗，金狗合约地址查询出来 然后查询 合约地址交互的买卖地址\n\n有了一个活跃的交易地址库后，你先去通过代码查询这些地址是否注册有 ENS域名，在通过域名查询是否有绑定 twitter账号，这样你就能洗出来非常多有价值的地址了，带ENS，还带社交推特。",
+    "favorites": 164,
+    "retweets": 55,
+    "views": "37557",
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "http://w3.ens.name"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "0x01yuqi",
+     "name": "0x01yuqi",
+     "created_at": "Sun Apr 04 14:55:16 +0000 2021",
+     "followers_count": 16803,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1568602453779836929",
+    "screen_name": "Alchemy",
+    "created_at": "Sat Sep 10 14:09:02 +0000 2022",
+    "text": "#SWAGBI saturday challenge 1/3\n\nfind &amp; comment vitalik's current USDT balance &amp; win web3 swag!\n\nvitalik's ETH address: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n\nUSDT contract address: 0xdAC17F958D2ee523a2206206994597C13D831ec7\n\nhint: use alchemy sdk! https://t.co/Ws1QhY0PcO 🤫 https://t.co/V1QtGYvgd6",
+    "favorites": 46,
+    "retweets": 12,
+    "views": null,
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "https://docs.alchemy.com/docs/how-to-get-token-balance-for-an-address"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "Alchemy",
+     "name": "Alchemy",
+     "created_at": "Wed Jan 17 22:00:04 +0000 2018",
+     "followers_count": 108518,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1457734972387770374",
+    "screen_name": "Derivatives_Ape",
+    "created_at": "Mon Nov 08 15:41:15 +0000 2021",
+    "text": "Can you imagine people typing “74.125.200.100” in their web browser to access https://t.co/JZPrNLYzVZ?\n\nThat’s what people are currently doing on ETH: “Let me send some money over at 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045” instead of simply Vitalik.eth \n\nDon’t sleep on $ENS",
+    "favorites": 78,
+    "retweets": 7,
+    "views": null,
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "http://Google.com"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "Derivatives_Ape",
+     "name": "Derivatives Monke",
+     "created_at": "Wed Jun 23 17:23:13 +0000 2021",
+     "followers_count": 49339,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1876117283019571564",
+    "screen_name": "okxexplorer",
+    "created_at": "Mon Jan 06 04:03:11 +0000 2025",
+    "text": "Let’s check out what @VitalikButerin did onchain today.\n\nOn January 6, 2025, at 02:29:47, he sold 339B $LDOG ($DOG) for 5.2 $ETH, which is around $18,900.\naddress: 0xd8da6bf26964af9d7eed9e03e53415d37aa96045\n\nmore details 🔗 https://t.co/gfYnY3pGbh",
+    "favorites": 26,
+    "retweets": 6,
+    "views": "7254",
+    "entities": {
+     "urls": [
+      {
+       "expanded_url": "https://www.okx.com/web3/explorer/eth/tx/0x0444dae259b982ab90045fc0ef2f42eae898aa7f099b2398ea0775c1bc74a085?channelId=okxep1"
+      }
+     ]
+    },
+    "user_info": {
+     "screen_name": "okxexplorer",
+     "name": "OKX Explorer",
+     "created_at": "Wed Oct 02 08:07:41 +0000 2024",
+     "followers_count": 134582,
+     "verified": true
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "2000857682807549957",
+    "screen_name": "walle_xyz",
+    "created_at": "Tue Dec 16 09:17:00 +0000 2025",
+    "text": "Guess Who 🔍\n\nThis wallet is owned by a well-known whale: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n\nDrop your guess below, 10 correct answers get early access codes.",
+    "favorites": 94,
+    "retweets": 11,
+    "views": "106075",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "walle_xyz",
+     "name": "Walle",
+     "created_at": "Tue Mar 19 05:34:43 +0000 2024",
+     "followers_count": 16640,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1934421727985258535",
+    "screen_name": "vitalikdotworld",
+    "created_at": "Mon Jun 16 01:24:14 +0000 2025",
+    "text": "Transfer any amount of ETH on the Base chain to Vitalik's address, and add ${Token name}+{Token full name} in the transaction's input data @VitalikButerin \nVitalik's address: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    "favorites": 7,
+    "retweets": 3,
+    "views": "407",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "vitalikdotworld",
+     "name": "vitalik.world",
+     "created_at": "Mon May 19 07:00:57 +0000 2025",
+     "followers_count": 194,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1731238780550680747",
+    "screen_name": "xcodezeroz",
+    "created_at": "Sun Dec 03 09:07:44 +0000 2023",
+    "text": "機器人測試 最終章 （請別亂點喔） \n“Fuck l got scammed and drained by opensea with my MetaMask, trust wallet and\n@okx wallet. all my binance ethereum bitcoin are gone I need a lawyer crypto expert!  0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045”  訓練人工智慧關鍵在堅持！\n@Portalcoin",
+    "favorites": 5,
+    "retweets": 1,
+    "views": "10647",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "xcodezeroz",
+     "name": "Kasa",
+     "created_at": "Sun Sep 19 08:46:13 +0000 2021",
+     "followers_count": 216,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1843283458434764961",
+    "screen_name": "DAMNsolkiller",
+    "created_at": "Mon Oct 07 13:33:17 +0000 2024",
+    "text": "If you're willing, donate some $DAMN to @VitalikButerin to support charity\n\n0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n\nvitalik.eth https://t.co/IZWqDhHgk2",
+    "favorites": 41,
+    "retweets": 9,
+    "views": "3870",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "DAMNsolkiller",
+     "name": "DAMN",
+     "created_at": "Mon Oct 23 06:55:51 +0000 2023",
+     "followers_count": 2654,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1976683368029765964",
+    "screen_name": "armando1off",
+    "created_at": "Fri Oct 10 16:16:54 +0000 2025",
+    "text": "69ers Syndicate just went NUCLEAR 🚀 \n\nI just joined the fun and BLASTED 696,969 (~$2000) $STRAYDOG into Vitalik’s wallet - 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045.\n\nSupply’s getting nuked, the burn is real and the pack only gets stronger. 🔥🐾\n\nWhale vibes, moon intent, culture locked.🔒\n\nWho’s brave enough to match this chad energy? 🐳👇",
+    "favorites": 43,
+    "retweets": 20,
+    "views": "1619",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "armando1off",
+     "name": "Armando Dragan",
+     "created_at": "Mon May 11 15:40:31 +0000 2015",
+     "followers_count": 1509,
+     "verified": false
+    }
+   },
+   {
+    "type": "tweet",
+    "tweet_id": "1982445258907828462",
+    "screen_name": "zhuilong888",
+    "created_at": "Sun Oct 26 13:52:36 +0000 2025",
+    "text": "刚才给V神的钱包捐了1亿的 $SPURDO 代币，数量可能不多，但是代表一份心意。\n\n本来 #SPURDO 社区就是按照V神的慈善想法一直在践行慈善之旅，之前社区有号召大家一起捐款到社区多签钱包（用作慈善、社区运营WEB2、WEB3等）\n\n我觉得这次捐款给V神钱包，是社区体现依然跟V神保持着联系的最佳体现；V神就是ETH链的绝对领导，SPURDO做的事情也是V神认可的慈善事业\n\n当然，SPURDO的叙事本身也是非常牛逼的IP，跟APU和PEPE被合并成为三大王者IP，自身有基础，做事有依据，期待SPURDO再次腾飞之时！\n\n如果你有意愿，也可以给V神钱包进行捐款，不用在乎多少，哪怕你只打1U，也是你的一份心意\n\nV神地址： 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\n\nSPURDO的CA：0x74c00c26e0ace673313aebf749a1a9644eeefdea",
+    "favorites": 40,
+    "retweets": 5,
+    "views": "7072",
+    "entities": {
+     "urls": []
+    },
+    "user_info": {
+     "screen_name": "zhuilong888",
+     "name": "蛙丑丑",
+     "created_at": "Wed May 01 08:52:06 +0000 2024",
+     "followers_count": 21528,
+     "verified": true
+    }
+   }
+  ],
+  "next_cursor": null,
+  "prev_cursor": null
+ }
+}

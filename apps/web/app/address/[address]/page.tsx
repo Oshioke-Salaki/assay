@@ -10,8 +10,10 @@ import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
+import { XPanel } from "@/components/XPanel";
 import { type AddressResponse, API_PUBLIC, ApiError, api } from "@/lib/api";
 import { addressUrl, date, fineness, int, pct, RATING_WORDS, short, txUrl, usd } from "@/lib/format";
+import { xReason } from "@/lib/x";
 
 export const revalidate = 30;
 
@@ -62,10 +64,13 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
       </AppShell>
     );
   }
-  const { assessment: a, agents } = data;
+  const { assessment: a, agents, x } = data;
   // The verdict is recomputed here with the current rule, so the page is right even while the
   // API serves an older build.
-  const check = verdictFor(a);
+  const ledgerCheck = verdictFor(a);
+  // What X says is added to the reasons, never to the verdict.
+  const xLine = xReason(x);
+  const check = xLine ? { ...ledgerCheck, reasons: [...ledgerCheck.reasons, xLine] } : ledgerCheck;
   const s = a.seller;
   const b = a.buyer;
   const fine = fineness(s.organicUsd, s.grossUsd);
@@ -266,6 +271,10 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             ))}
           </ul>
         ) : null}
+      </Panel>
+
+      <Panel title="What X says" span={12} id="x">
+        <XPanel mentions={x} address={address} isSeller={s.grossUsd > 0} />
       </Panel>
 
       <Panel

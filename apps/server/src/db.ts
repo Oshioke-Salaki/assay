@@ -140,6 +140,26 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX paid_calls_ts ON paid_calls (ts);
   `,
+  // v3: what X says about each seller, one paid search per address (see enrich/xmentions.ts).
+  `
+  CREATE TABLE x_mentions (
+    address    TEXT    PRIMARY KEY,
+    checked_at INTEGER NOT NULL,
+    status     TEXT    NOT NULL,
+    mentions   INTEGER NOT NULL,
+    warnings   INTEGER NOT NULL,
+    data       TEXT    NOT NULL
+  ) WITHOUT ROWID;
+  CREATE INDEX x_mentions_checked ON x_mentions (checked_at);
+  `,
+  // v4: addresses people asked about, searched on X ahead of the revenue-ordered queue.
+  `
+  CREATE TABLE x_wanted (
+    address   TEXT    PRIMARY KEY,
+    wanted_at INTEGER NOT NULL,
+    paid      INTEGER NOT NULL
+  ) WITHOUT ROWID;
+  `,
 ];
 
 export function openDatabase(path: string): DB {

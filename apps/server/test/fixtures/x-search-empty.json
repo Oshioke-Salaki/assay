@@ -1,0 +1,18 @@
+{
+ "capability": "x.posts.search",
+ "transaction": "0x702e0830c3ba6892159d7c44b791603d12545af63511299bb3d4d37a8b9019f0",
+ "payment": {
+  "token": "USDC",
+  "asset": "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+  "atomic": "5000",
+  "usd": "0.005"
+ },
+ "provider": "tikhub",
+ "resultCount": 1,
+ "output": {
+  "status": "ok",
+  "timeline": [],
+  "next_cursor": null,
+  "prev_cursor": null
+ }
+}

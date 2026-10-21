@@ -56,6 +56,27 @@ The result is clamped to 0–100 and rounded.
 
 A low score alone never blocks. An honest seller with three customers is new, not fraudulent.
 
+## What X says
+
+Onchain data shows how a seller is paid. It cannot show whether people are warning each other about it. So Assay searches X for every seller's exact address and shows what it finds on the report, in the check's reasons, and in the API, SDK and MCP answers.
+
+**Who gets searched.** Each search is one paid call through the buy gateway ($0.005 in USDC from Assay's agent wallet), under a daily budget (default $0.50, about 100 searches). It goes in this order:
+
+1. addresses an agent paid to check;
+2. sellers whose report someone opened;
+3. every other seller that has taken at least $1, busiest first.
+
+Each address is searched again weekly. A failed search is retried after a day.
+
+**How posts are read.**
+
+- Only posts that contain the address, in their text or in a link, count as mentions.
+- A post is a **warning** when the address shares its paragraph with a word such as scam, rug, drainer, phishing, hack, exploit, stolen or fraud, within 160 characters of it. A news digest that names the address and, further down, an unrelated exploit does not count.
+- Posts from accounts under 30 days old, or with fewer than 25 followers, are shown but counted apart as weak.
+- Pasted copies of one text count once. Spam is pasted, not written.
+
+**Not scored, on purpose.** Anyone can post "0x… is a scam" about a competitor, and a victim's plea or a bot's bait names an address next to the same words. A score that a post can move is worth nothing. So posts never change a rating, a score, a verdict or a signed attestation. They add one plain sentence to the check's reasons and are listed with links, so a person or an agent can read them before paying. The wording says what the posts contain ("name this address next to words like scam or hack"), not what the seller did.
+
 ## Reviews
 
 Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback file names a settlement Assay finds onchain from the reviewer to the agent's owner or wallet; **paid customer** when the reviewer paid the agent before writing it; **never paid it** otherwise.
@@ -65,4 +86,5 @@ Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback fi
 - Funding data fills in over time; until a payer is checked it is treated as independent, and each report shows how much of its payer base is checked.
 - A loop that never sends money back to the seller directly, but launders it through a non-x402 transfer, is not seen as a loop; the funding trace catches the common case where the payers were funded from the seller's side.
 - wFIAT history before the first stored rate is priced at the earliest stored rate.
+- X search covers what X's search returns for the address. Posts that write the address differently (shortened, split, in an image) are not found.
 - Scores describe x402 revenue only. They say nothing about service quality beyond what payment-verified reviews add.

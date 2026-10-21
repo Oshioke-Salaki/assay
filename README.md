@@ -10,6 +10,8 @@ On the first full pass of Celo mainnet history, Assay found 6 payment loops (the
 - **Agents** pay $0.002 per check over x402 in USD₮ (or USDC, USA₮, wARS, wBRL, wCOP), or put `withAssayGuard` (`npm install assayscore`) in front of their own x402 client so a blocked seller is never paid.
 - **Contracts** gate on `AssayRegistry.isInvestmentGrade(seller)`.
 
+Alongside the ledger, Assay searches X for every seller's exact address, paid per search through buy, and shows the posts that name it, warnings first. The posts are evidence for the reader and never move a score, because anyone can post about anyone.
+
 ## What is in this repo
 
 | Path | What it is |

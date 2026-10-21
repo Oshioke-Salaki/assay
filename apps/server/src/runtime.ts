@@ -1,4 +1,5 @@
 import { createPublicClient, fallback, http, type PublicClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { celo } from "viem/chains";
 import { Analysis } from "./analysis.js";
 import type { IndexStatus } from "./api/app.js";
@@ -8,12 +9,13 @@ import { AgentCards } from "./enrich/agents.js";
 import { Blockscout } from "./enrich/blockscout.js";
 import { Enricher } from "./enrich/enricher.js";
 import { FxRates } from "./enrich/fx.js";
+import { XMentionsWatcher } from "./enrich/xmentions.js";
 import type { Env } from "./env.js";
 import { REGISTRY_CURSOR, RegistryIndexer } from "./indexer/registry.js";
 import { FailoverSource, type RpcReader, RpcSource } from "./indexer/rpcsource.js";
 import { SETTLEMENT_CURSOR, SettlementIndexer } from "./indexer/settlements.js";
 import { SqdClient, sleep } from "./indexer/sqd.js";
-import { createPayingFetch, PAID_MULTICALL_BATCH } from "./lib/buy.js";
+import { createPayingFetch, type ReconcileReader, reconcilePaidCalls } from "./lib/buy.js";
 import { log } from "./lib/log.js";
 
 export interface Runtime {
@@ -31,13 +33,19 @@ export interface Runtime {
   close: () => void;
 }
 
+const USDC = "0xceba9300f2b948710d2653dd7b07f33a8b32118c" as const;
+
 export function createRuntime(env: Env): Runtime {
   const db = openDatabase(env.DATABASE_PATH);
   const fx = new FxRates(db);
   const rpc = createPublicClient({
     chain: celo,
+    // RPC_URL first (Chainstack in production), then Celo's public RPC, then Ankr.
     transport: fallback([
       http(env.RPC_URL, { timeout: 20_000, retryCount: 2 }),
+      ...(env.RPC_URL.includes("forno.celo.org")
+        ? []
+        : [http("https://forno.celo.org", { timeout: 20_000 })]),
       http("https://rpc.ankr.com/celo"),
     ]),
     batch: { multicall: true },
@@ -57,35 +65,10 @@ export function createRuntime(env: Env): Runtime {
     toBlock: env.INDEX_TO_BLOCK,
     onIngest: invalidate,
   });
-  // Enrichment sends large multicalls. With a buy payer key they go to Chainstack through the
-  // buy gateway, one paid JSON-RPC batch per round, under a daily cap; otherwise to the free RPC.
-  // With a buy payer key, enrichment reads go to Chainstack through the buy gateway: one paid
-  // JSON-RPC request per multicall chunk, one at a time, under a daily cap. If a paid call fails
-  // the same request falls back to the free RPC, so enrichment never stalls on the gateway.
-  const enrichRpc = env.BUY_PAYER_KEY
-    ? (createPublicClient({
-        chain: celo,
-        transport: fallback([
-          http(env.BUY_CHAINSTACK_URL, {
-            timeout: 120_000,
-            retryCount: 0,
-            fetchFn: createPayingFetch({
-              db,
-              privateKey: env.BUY_PAYER_KEY,
-              service: "chainstack-celo-rpc",
-              pricePerCallUsd: 0.01,
-              dailyCapUsd: env.BUY_DAILY_CAP_USD,
-            }),
-          }),
-          http(env.RPC_URL, { timeout: 20_000, retryCount: 2 }),
-        ]),
-        batch: { multicall: { batchSize: PAID_MULTICALL_BATCH } },
-      }) as PublicClient)
-    : rpc;
   const enricher = new Enricher(
     db,
     new Blockscout(env.BLOCKSCOUT_URL, env.BLOCKSCOUT_RPS),
-    enrichRpc,
+    rpc,
     invalidate,
     // Full-history funding scans need the portal itself; the RPC failover only serves the tail.
     { source: rawSqd, rpc, head: async () => (await rawSqd.finalizedHead()).number },
@@ -126,6 +109,42 @@ export function createRuntime(env: Env): Runtime {
     return { settlements: s, registry: r };
   };
 
+  // What X says about each seller, bought one search at a time through the buy gateway.
+  const xmentions =
+    env.BUY_PAYER_KEY && env.X_MENTIONS_DAILY_CAP_USD > 0
+      ? new XMentionsWatcher(db, {
+          pay: createPayingFetch({
+            db,
+            privateKey: env.BUY_PAYER_KEY,
+            service: "buy-x-search",
+            pricePerCallUsd: 0.005,
+            dailyCapUsd: env.X_MENTIONS_DAILY_CAP_USD,
+          }),
+          searchUrl: env.BUY_X_SEARCH_URL,
+          minGrossUsd: env.X_MENTIONS_MIN_GROSS_USD,
+          onChange: invalidate,
+        })
+      : null;
+
+  // Keeps the paid-call ledger equal to the chain: every payment from Assay's wallet to buy.
+  const reconcileLoop = async (signal: AbortSignal) => {
+    if (!env.BUY_PAYER_KEY) return;
+    const payer = privateKeyToAccount(env.BUY_PAYER_KEY).address;
+    while (!signal.aborted) {
+      try {
+        await reconcilePaidCalls(db, rpc as unknown as ReconcileReader, {
+          payer,
+          payTo: env.BUY_GATEWAY_PAY_TO,
+          token: USDC,
+          decimals: 6,
+        });
+      } catch (err) {
+        log.warn("paid call reconcile failed", { error: String(err) });
+      }
+      await sleep(5 * 60_000, signal);
+    }
+  };
+
   const runWorkers = async (signal: AbortSignal) => {
     const indexLoop = async () => {
       while (!signal.aborted) {
@@ -138,7 +157,13 @@ export function createRuntime(env: Env): Runtime {
         await sleep(env.INDEX_POLL_MS, signal);
       }
     };
-    await Promise.all([indexLoop(), enricher.run(signal), cards.run(signal)]);
+    await Promise.all([
+      indexLoop(),
+      enricher.run(signal),
+      cards.run(signal),
+      xmentions?.run(signal).catch((err) => log.error("x mentions stopped", { error: String(err) })),
+      reconcileLoop(signal),
+    ]);
   };
 
   return {
