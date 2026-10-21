@@ -99,6 +99,17 @@ describe("funding analysis", () => {
     expect(flag?.addresses).toHaveLength(4);
   });
 
+  it("words the finding for one payer and for many", () => {
+    const many = assess(ledger, seller, ctx({ funding: sock.map((s) => [s, { funder: seller }]) }));
+    expect(many.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(
+      /^4 payers, 50% of revenue, were first funded/,
+    );
+    const one = assess(ledger, seller, ctx({ funding: [[sock[0]!, { funder: seller }]] }));
+    expect(one.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(
+      /^1 payer, .* of revenue, was first funded/,
+    );
+  });
+
   it("follows funding one hop back", () => {
     const middle = addr("middleman");
     const a = assess(
@@ -229,6 +240,8 @@ describe("edge cases", () => {
     expect(a.rating).toBe("NR");
     expect(a.score).not.toBeNull();
     expect(a.flags.map((f) => f.code)).toContain("THIN_FILE");
+    expect(a.flags.find((f) => f.code === "THIN_FILE")?.detail).toContain("from 1 payer.");
+    expect(a.flags.find((f) => f.code === "THIN_FILE")?.detail).not.toContain("(s)");
   });
 
   it("ignores self-payments", () => {

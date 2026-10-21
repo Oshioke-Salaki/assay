@@ -33,6 +33,11 @@ export const RATING_FLOORS: readonly [Rating, number][] = [
   ["D", 0],
 ];
 
+/** "1 payer", "375 payers". */
+function count(n: number, noun: string): string {
+  return `${n.toLocaleString("en-US")} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 export function ratingFor(score: number): Rating {
   for (const [rating, floor] of RATING_FLOORS) if (score >= floor) return rating;
   return "D";
@@ -121,7 +126,7 @@ export function assess(ledger: Ledger, address: Address, ctx: AssessmentContext)
         code: "THIN_FILE",
         severity: "info",
         title: "Thin file",
-        detail: `Not enough history to rate: ${seller.settlements} settlement(s) from ${seller.payers} payer(s). A rating needs at least ${THIN_FILE.minSettlements} settlements from ${THIN_FILE.minPayers} payers.`,
+        detail: `Not enough history to rate: ${count(seller.settlements, "settlement")} from ${count(seller.payers, "payer")}. A rating needs at least ${THIN_FILE.minSettlements} settlements from ${THIN_FILE.minPayers} payers.`,
       });
     }
     if (idle > 30 && Number.isFinite(idle)) {
@@ -345,7 +350,7 @@ function sellerFlags(
       code: "SELLER_FUNDED_PAYERS",
       severity: usd / gross >= 0.2 ? "critical" : "warning",
       title: "Pays itself through wallets it funded",
-      detail: `${funded.length} payer(s), ${pct(usd / gross)} of revenue, were first funded by this address. That revenue is not counted.`,
+      detail: `${count(funded.length, "payer")}, ${pct(usd / gross)} of revenue, ${funded.length === 1 ? "was" : "were"} first funded by this address. That revenue is not counted.`,
       usd,
       addresses: funded.map((l) => l.payer).slice(0, 10),
       txs: takeTxs(funded),
@@ -358,7 +363,7 @@ function sellerFlags(
       code: "SHARED_FUNDER",
       severity: usd / gross >= 0.2 ? "critical" : "warning",
       title: "Payers share the seller's funding source",
-      detail: `${shared.length} payer(s), ${pct(usd / gross)} of revenue, were funded by the same private wallet as this address or by a member of its loop. That revenue is not counted.`,
+      detail: `${count(shared.length, "payer")}, ${pct(usd / gross)} of revenue, ${shared.length === 1 ? "was" : "were"} funded by the same private wallet as this address or by a member of its loop. That revenue is not counted.`,
       usd,
       addresses: shared.map((l) => l.payer).slice(0, 10),
       txs: takeTxs(shared),
@@ -376,7 +381,7 @@ function sellerFlags(
       code: "SAME_HUMAN_PAYERS",
       severity: "warning",
       title: "Several payers are one human",
-      detail: `${ls.length} payers resolve to ${dupes.length} human(s) through Self Agent ID. They count once toward payer diversity.`,
+      detail: `${ls.length} payers resolve to ${count(dupes.length, "human")} through Self Agent ID. They count once toward payer diversity.`,
       addresses: ls.map((l) => l.payer).slice(0, 10),
     });
   }
@@ -407,7 +412,7 @@ function sellerFlags(
       code: "ESTABLISHED_PAYERS",
       severity: "positive",
       title: "Paid by established wallets",
-      detail: `${established.length} organic payer(s), ${pct(usd / Math.max(seller.organicUsd, 1e-9))} of organic revenue, had Celo activity at least 30 days before their first payment.`,
+      detail: `${count(established.length, "organic payer")}, ${pct(usd / Math.max(seller.organicUsd, 1e-9))} of organic revenue, had Celo activity at least 30 days before their first payment.`,
       usd,
     });
   }
