@@ -92,12 +92,12 @@ A failure opens one issue labelled `uptime`; GitHub emails everyone watching the
 ```sh
 npm login
 for p in core sdk mcp; do (cd packages/$p && pnpm run build && pnpm pack --pack-destination ../../out); done
-npm publish out/assayscore-core-*.tgz --access public --auth-type=web
-npm publish out/assayscore-[0-9]*.tgz --access public --auth-type=web
-npm publish out/assayscore-mcp-*.tgz --access public --auth-type=web
+npx -y npm@11 publish out/assayscore-core-*.tgz --access public --auth-type=web
+npx -y npm@11 publish out/assayscore-[0-9]*.tgz --access public --auth-type=web
+npx -y npm@11 publish out/assayscore-mcp-*.tgz --access public --auth-type=web
 ```
 
-Approve the first publish in the browser and tick the option to skip 2FA for a few minutes; the other two then go straight through. Bump the three versions together.
+Approve the first publish in the browser and tick the option to skip 2FA for a few minutes; the other two then go straight through. Bump the three versions together. Use npm 11 (`npx -y npm@11 publish …`): npm 10 can report success for a publish that npm then holds. npm answers a publish with 202 Accepted and lists the version a few minutes later, after its checks, so wait for `npm view <name> version` to show it before announcing a release.
 
 ## Onchain setup (once)
 
