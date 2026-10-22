@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell, Panel } from "@/components/AppShell";
 import styles from "@/components/app.module.css";
+import { ClaimLookup } from "@/components/ClaimLookup";
 import { Hallmark } from "@/components/Hallmark";
 import { type SellerRow, tryApi } from "@/lib/api";
 import { ago, int, short, usd } from "@/lib/format";
@@ -59,11 +60,7 @@ export default async function SellersPage({
             <code>assay_find_sellers</code>.
           </p>
         </div>
-        <div className={styles.actions}>
-          <Link href="/docs#claim" className="btn btn--ink">
-            Claim your page
-          </Link>
-        </div>
+        <ClaimLookup />
       </div>
 
       <Panel span={12}>

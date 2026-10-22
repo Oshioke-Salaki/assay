@@ -132,6 +132,11 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
               Publish hallmark onchain
             </a>
           ) : null}
+          {!claim && a.seller.grossUsd > 0 ? (
+            <a className="btn btn--quiet" href="#claim">
+              Claim this page
+            </a>
+          ) : null}
           <a className="btn btn--quiet" href={`${API_PUBLIC}/v1/address/${address}`}>
             JSON
           </a>
