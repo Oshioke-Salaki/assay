@@ -69,3 +69,7 @@
 ## Motion
 
 Four pieces of motion, each performing the data rather than decorating it, all without a library: the loop drawing on reports that have a loop (`components/LoopRing.tsx`, canvas, geometry in `lib/loopring.ts`), the hallmark strike (`components/Hallmark.tsx`, `strike` prop, CSS keyframes), the refining bar (`components/AssayBar.tsx`, `refine` prop, colour transitions once in view) and the furnace on the economy page (`components/Furnace.tsx`, a bead per settlement indexed since the page opened). Rules: `prefers-reduced-motion` gets one still frame; nothing moves layout (CLS 0); canvases run only while on screen in a visible tab and idle when nothing changes; the canvas components load lazily in the browser (about 2 KB and 1 KB gzipped) and are not sent to pages that do not need them.
+
+## Sellers directory and rating plans
+
+`GET /v1/sellers` joins the ranked sellers from the analysis snapshot with `claims` (name, what, category, website) and filters by text, rating floor, category and claim; the site's `/sellers` page is that endpoint with a form. `packages/core/src/plan.ts` builds the rating plan from an assessment alone: it re-runs `scoreFrom` with changed inputs (customers added to the inverse-Herfindahl from the current totals, more active days, dormancy lifted, identity points when the record is at least half organic) and reports the score after each. Served at `GET /v1/address/:address/plan`, shown on every report with revenue, and exposed through the SDK (`plan`, `sellers`) and MCP (`assay_rating_plan`, `assay_find_sellers`).

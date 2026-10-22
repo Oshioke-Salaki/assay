@@ -1,6 +1,7 @@
+import type { RatingPlan } from "assayscore-core";
 import { type Address, type CheckResult, isAddress, RATING_CODES, type Rating } from "assayscore-core";
 
-export type { Address, CheckResult, Rating } from "assayscore-core";
+export type { Address, CheckResult, Rating, RatingPlan } from "assayscore-core";
 
 type Fetch = typeof fetch;
 type FetchInput = Parameters<typeof fetch>[0];
@@ -122,6 +123,36 @@ export interface IndependentReport {
   }[];
 }
 
+export interface SellerRow {
+  address: Address;
+  grossUsd: number;
+  organicUsd: number;
+  payers: number;
+  organicPayers: number;
+  settlements: number;
+  score: number | null;
+  rating: Rating;
+  lastTs: number | null;
+  agentIds: string[];
+  /** Present when the wallet's owner has claimed its page. */
+  name?: string;
+  what?: string | null;
+  category?: string | null;
+  url?: string | null;
+}
+
+export interface SellersQuery {
+  /** Name, what they sell, category, agent id or address fragment. */
+  q?: string;
+  /** Only sellers rated this or better: "BBB", "BB", "B", … */
+  minRating?: Rating;
+  category?: string;
+  claimedOnly?: boolean;
+  sort?: "organic" | "gross";
+  limit?: number;
+  offset?: number;
+}
+
 export interface Watch {
   id: string;
   /** Shown once, on creation; null when an existing watch was extended. */
@@ -180,6 +211,21 @@ export function createAssay(opts: AssayOptions = {}) {
       const qs = p.toString();
       return call<{ total: number; rows: unknown[] }>(plain, `/v1/agents${qs ? `?${qs}` : ""}`);
     },
+    /** Free: sellers on Celo ranked by organic revenue, searchable and filterable; claimed sellers carry their name. */
+    sellers: (q: SellersQuery = {}) => {
+      const p = new URLSearchParams();
+      if (q.q) p.set("q", q.q);
+      if (q.minRating) p.set("minRating", q.minRating);
+      if (q.category) p.set("category", q.category);
+      if (q.claimedOnly) p.set("claimed", "1");
+      if (q.sort) p.set("sort", q.sort);
+      if (q.limit) p.set("limit", String(q.limit));
+      if (q.offset) p.set("offset", String(q.offset));
+      const qs = p.toString();
+      return call<{ total: number; rows: SellerRow[] }>(plain, `/v1/sellers${qs ? `?${qs}` : ""}`);
+    },
+    /** Free: what would raise an address's rating, from the real score formula. */
+    plan: (a: string) => call<RatingPlan>(plain, `/v1/address/${requireAddress(a)}/plan`),
     /** Free: which of a seller's payers count as independent users by the hackathon's rule, with reasons. */
     independent: (a: string, q?: { from?: number; to?: number; limit?: number }) => {
       const p = new URLSearchParams();

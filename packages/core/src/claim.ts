@@ -11,12 +11,28 @@ export interface ClaimFields {
   url: string;
   x: string;
   logoUrl: string;
+  /** One line on what the seller sells, for the directory. */
+  what: string;
+  category: SellerCategory | "";
   /** Unix seconds; the API accepts it for ten minutes. */
   issuedAt: number;
   nonce: string;
 }
 
-export const CLAIM_LIMITS = { name: 40, url: 200, logoUrl: 300, x: 15 } as const;
+export const SELLER_CATEGORIES = [
+  "data",
+  "ai",
+  "payments",
+  "compute",
+  "social",
+  "commerce",
+  "finance",
+  "identity",
+  "other",
+] as const;
+export type SellerCategory = (typeof SELLER_CATEGORIES)[number];
+
+export const CLAIM_LIMITS = { name: 40, url: 200, logoUrl: 300, x: 15, what: 80 } as const;
 
 /** Names that would read as someone else's. A claim says "this wallet's owner", nothing more. */
 const RESERVED_WORDS = [
@@ -49,6 +65,8 @@ export function claimMessage(f: ClaimFields): string {
     `url: ${f.url}`,
     `x: ${f.x}`,
     `logo: ${f.logoUrl}`,
+    `what: ${f.what}`,
+    `category: ${f.category}`,
     `issued: ${f.issuedAt}`,
     `nonce: ${f.nonce}`,
     "",
@@ -71,6 +89,12 @@ export function validateClaim(
     .trim()
     .replace(/^@/, "");
   const logoUrl = String(input.logoUrl ?? "").trim();
+  const what = String(input.what ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const category = String(input.category ?? "")
+    .trim()
+    .toLowerCase();
   const issuedAt = Number(input.issuedAt);
   const nonce = String(input.nonce ?? "");
   if (!Number.isInteger(issuedAt) || issuedAt <= 0) return { ok: false, error: "Missing issue time." };
@@ -95,6 +119,12 @@ export function validateClaim(
     }
     if (x && !/^[A-Za-z0-9_]{1,15}$/.test(x))
       return { ok: false, error: "X handle: letters, numbers and _ only." };
+    if (what.length > CLAIM_LIMITS.what)
+      return { ok: false, error: `What you sell: at most ${CLAIM_LIMITS.what} characters.` };
+    if (what && /[<>]/.test(what))
+      return { ok: false, error: "What you sell: plain words, no angle brackets." };
+    if (category && !(SELLER_CATEGORIES as readonly string[]).includes(category))
+      return { ok: false, error: `Category must be one of ${SELLER_CATEGORIES.join(", ")}.` };
   }
   return {
     ok: true,
@@ -105,6 +135,8 @@ export function validateClaim(
       url: action === "claim" ? url : "",
       x: action === "claim" ? x : "",
       logoUrl: action === "claim" ? logoUrl : "",
+      what: action === "claim" ? what : "",
+      category: action === "claim" ? (category as SellerCategory | "") : "",
       issuedAt,
       nonce,
     },

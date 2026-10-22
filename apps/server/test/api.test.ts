@@ -619,6 +619,8 @@ describe("claimed pages, badges and independent payers", () => {
       url: "https://weather.example",
       x: "weatheroracle",
       logoUrl: "",
+      what: "Weather by the call",
+      category: "data" as const,
       issuedAt: now,
       nonce: "0123456789abcdef",
       ...over,
@@ -652,7 +654,15 @@ describe("claimed pages, badges and independent payers", () => {
       ((await (await get(app, `/v1/address/${address}`)).json()) as { claim: { name: string } }).claim.name,
     ).toBe("Weather Oracle v2");
 
-    const release = await signed({ action: "release", name: "", url: "", x: "", nonce: "aaaaaaaaaaaaaaaa" });
+    const release = await signed({
+      action: "release",
+      name: "",
+      url: "",
+      x: "",
+      what: "",
+      category: "",
+      nonce: "aaaaaaaaaaaaaaaa",
+    });
     expect(await (await post(app, release.body)).json()).toEqual({ released: true });
     expect(
       ((await (await get(app, `/v1/address/${address}`)).json()) as { claim: unknown }).claim,
@@ -855,5 +865,60 @@ describe("CORS for the browser's writes", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("https://assay.example");
     expect(res.headers.get("access-control-allow-methods")).toMatch(/POST/);
     expect(res.headers.get("access-control-allow-methods")).toMatch(/DELETE/);
+  });
+});
+
+describe("sellers directory and rating plans", () => {
+  it("filters sellers by text, rating floor, category and claim, with claim fields on rows", async () => {
+    const { app, db } = build();
+    db.prepare(
+      "INSERT INTO claims (address, name, url, logo_url, x, what, category, signature, issued_at, updated_at) VALUES (?, 'Shop One', 'https://shop.example', NULL, 'shopone', 'Weather data by the call', 'data', '0x00', 1, 1)",
+    ).run(SHOP);
+    const all = (await (await get(app, "/v1/sellers?sort=gross&limit=100")).json()) as {
+      total: number;
+      rows: { address: string; name?: string; what?: string; category?: string; rating: string }[];
+    };
+    const shop = all.rows.find((r) => r.address === SHOP);
+    expect(shop).toMatchObject({ name: "Shop One", what: "Weather data by the call", category: "data" });
+    const byText = (await (await get(app, "/v1/sellers?q=weather")).json()) as {
+      rows: { address: string }[];
+    };
+    expect(byText.rows.map((r) => r.address)).toEqual([SHOP]);
+    const byCat = (await (await get(app, "/v1/sellers?category=data")).json()) as {
+      rows: { address: string }[];
+    };
+    expect(byCat.rows.map((r) => r.address)).toEqual([SHOP]);
+    const claimed = (await (await get(app, "/v1/sellers?claimed=1")).json()) as { total: number };
+    expect(claimed.total).toBe(1);
+    const floor = (await (await get(app, "/v1/sellers?minRating=BBB&limit=100")).json()) as {
+      rows: { rating: string }[];
+    };
+    for (const r of floor.rows) expect(["AAA", "AA", "A", "BBB"]).toContain(r.rating);
+    const none = (await (await get(app, "/v1/sellers?q=zzzz-nothing")).json()) as { total: number };
+    expect(none.total).toBe(0);
+  });
+
+  it("gives a rating plan built from the real formula, and a plain answer for an unknown address", async () => {
+    const { app } = build();
+    const res = await get(app, `/v1/address/${SHOP}/plan`);
+    expect(res.status).toBe(200);
+    const p = (await res.json()) as {
+      applicable: boolean;
+      rating: string;
+      score: number;
+      levers: { code: string; gain: number }[];
+      note: string;
+      customers: { typicalUsd: number } | null;
+    };
+    expect(p.applicable).toBe(true);
+    expect(p.note).toMatch(/Only independent customers count/);
+    expect(p.customers?.typicalUsd).toBeGreaterThan(0);
+    const unknown = (await (await get(app, `/v1/address/0x${"e".repeat(40)}/plan`)).json()) as {
+      applicable: boolean;
+      reason: string;
+    };
+    expect(unknown.applicable).toBe(false);
+    expect(unknown.reason).toMatch(/no x402 revenue/);
+    expect((await get(app, "/v1/address/nope/plan")).status).toBe(400);
   });
 });

@@ -1,4 +1,4 @@
-import type { Flag } from "assayscore-core";
+import type { Flag, RatingPlan } from "assayscore-core";
 import { THIN_FILE, VISA_TIERS, verdictFor } from "assayscore-core";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
 import { LoopRingLazy } from "@/components/LoopRingLazy";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
+import { PlanPanel } from "@/components/PlanPanel";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
 import { XPanel } from "@/components/XPanel";
 import { type AddressResponse, API_PUBLIC, ApiError, api, type Independent, tryApi } from "@/lib/api";
@@ -68,7 +69,10 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
   }
   const { assessment: a, agents, x } = data;
   const claim = data.claim ?? null;
-  const independent = a.seller.payers > 0 ? await tryApi<Independent>(`/v1/independent/${address}`) : null;
+  const [independent, plan] = await Promise.all([
+    a.seller.payers > 0 ? tryApi<Independent>(`/v1/independent/${address}`) : Promise.resolve(null),
+    a.seller.grossUsd > 0 ? tryApi<RatingPlan>(`/v1/address/${address}/plan`) : Promise.resolve(null),
+  ]);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://assayscore.xyz";
   // The verdict is recomputed here with the current rule, so the page is right even while the
   // API serves an older build.
@@ -428,6 +432,21 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             you or your own funder, and was active on Celo before the window started. Assay already traces all
             three, so any team can check its own numbers here. Wallets you created and funded never count.
           </p>
+        </Panel>
+      ) : null}
+
+      {plan ? (
+        <Panel
+          title="What would raise this rating"
+          span={12}
+          id="plan"
+          action={
+            <a className="link" href={`${API_PUBLIC}/v1/address/${address}/plan`}>
+              JSON
+            </a>
+          }
+        >
+          <PlanPanel plan={plan} />
         </Panel>
       ) : null}
 

@@ -16,8 +16,11 @@ export interface SellerRow {
   rating: Rating;
   lastTs: number | null;
   agentIds: string[];
-  /** Name the wallet's owner claimed for its page, when it has. */
+  /** What the wallet's owner put on its page, when it has claimed it. */
   name?: string;
+  what?: string | null;
+  category?: string | null;
+  url?: string | null;
 }
 
 /** What a wallet's owner put on its page by signing a claim. */
@@ -27,6 +30,8 @@ export interface ClaimInfo {
   url: string | null;
   logoUrl: string | null;
   x: string | null;
+  what: string | null;
+  category: string | null;
   updatedAt: number;
 }
 

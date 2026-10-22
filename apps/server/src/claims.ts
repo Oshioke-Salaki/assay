@@ -12,35 +12,49 @@ export interface Claim {
   url: string | null;
   logoUrl: string | null;
   x: string | null;
+  what: string | null;
+  category: string | null;
   updatedAt: number;
 }
 
-export function readClaim(db: DB, address: string): Claim | null {
-  const r = db
-    .prepare("SELECT address, name, url, logo_url, x, updated_at FROM claims WHERE address = ?")
-    .get(address.toLowerCase()) as
-    | {
-        address: Address;
-        name: string;
-        url: string | null;
-        logo_url: string | null;
-        x: string | null;
-        updated_at: number;
-      }
-    | undefined;
-  return r
-    ? { address: r.address, name: r.name, url: r.url, logoUrl: r.logo_url, x: r.x, updatedAt: r.updated_at }
-    : null;
+interface ClaimRow {
+  address: Address;
+  name: string;
+  url: string | null;
+  logo_url: string | null;
+  x: string | null;
+  what: string | null;
+  category: string | null;
+  updated_at: number;
 }
 
-/** Claimed names for many addresses at once, for lists. */
-export function readClaimNames(db: DB): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const r of db.prepare("SELECT address, name FROM claims").iterate() as IterableIterator<{
-    address: string;
-    name: string;
-  }>)
-    out.set(r.address, r.name);
+const COLUMNS = "address, name, url, logo_url, x, what, category, updated_at";
+
+function rowToClaim(r: ClaimRow): Claim {
+  return {
+    address: r.address,
+    name: r.name,
+    url: r.url,
+    logoUrl: r.logo_url,
+    x: r.x,
+    what: r.what,
+    category: r.category,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function readClaim(db: DB, address: string): Claim | null {
+  const r = db.prepare(`SELECT ${COLUMNS} FROM claims WHERE address = ?`).get(address.toLowerCase()) as
+    | ClaimRow
+    | undefined;
+  return r ? rowToClaim(r) : null;
+}
+
+/** Every claim at once, for lists and the directory. */
+export function readClaims(db: DB): Map<string, Claim> {
+  const out = new Map<string, Claim>();
+  for (const r of db.prepare(`SELECT ${COLUMNS} FROM claims`).iterate() as IterableIterator<ClaimRow>)
+    out.set(r.address, rowToClaim(r));
   return out;
 }
 
@@ -93,9 +107,22 @@ export async function applyClaim(
     return { ok: true, action: "release" };
   }
   db.prepare(
-    `INSERT INTO claims (address, name, url, logo_url, x, signature, issued_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO claims (address, name, url, logo_url, x, what, category, signature, issued_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (address) DO UPDATE SET name = excluded.name, url = excluded.url, logo_url = excluded.logo_url,
-       x = excluded.x, signature = excluded.signature, issued_at = excluded.issued_at, updated_at = excluded.updated_at`,
-  ).run(f.address, f.name, f.url || null, f.logoUrl || null, f.x || null, signature, f.issuedAt, now);
+       x = excluded.x, what = excluded.what, category = excluded.category, signature = excluded.signature,
+       issued_at = excluded.issued_at, updated_at = excluded.updated_at`,
+  ).run(
+    f.address,
+    f.name,
+    f.url || null,
+    f.logoUrl || null,
+    f.x || null,
+    f.what || null,
+    f.category || null,
+    signature,
+    f.issuedAt,
+    now,
+  );
   return { ok: true, action: "claim", claim: readClaim(db, f.address)! };
 }

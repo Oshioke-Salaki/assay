@@ -17,6 +17,8 @@ const SECTIONS = [
   ["reviews", "Payment-verified reviews"],
   ["alerts", "Alerts"],
   ["claim", "Claim your page"],
+  ["sellers", "Find sellers"],
+  ["plan", "Raise your rating"],
   ["independent", "Independent payers"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
@@ -327,14 +329,36 @@ POST ${API_PUBLIC}/v1/watch        # x402, $0.05
         <Panel title="Claim your page" id="claim">
           <p>
             If a seller address is yours, open its report and use &ldquo;Claim this page&rdquo;: connect that
-            wallet, sign one message (it moves no money), and your name, website and X handle appear on the
-            report and in the seller lists. A claim says &ldquo;this wallet&rsquo;s owner chose this
-            name&rdquo;; names that read as someone else&rsquo;s are refused. Every address also has a badge
-            for READMEs that shows its current rating and links to the report.
+            wallet, sign one message (it moves no money), and your name, what you sell, website and X handle
+            appear on the report and in the sellers directory. A claim says &ldquo;this wallet&rsquo;s owner
+            chose this name&rdquo;; names that read as someone else&rsquo;s are refused. Every address also
+            has a badge for READMEs that shows its current rating and links to the report.
           </p>
           <Code label="Badge">{`
 [![Assay rating](${API_PUBLIC}/v1/badge/0xYourAddress.svg)](https://assayscore.xyz/address/0xYourAddress)
           `}</Code>
+        </Panel>
+
+        <Panel title="Find sellers" id="sellers">
+          <p>
+            The <Link href="/sellers">sellers directory</Link> lists every x402 seller on Celo, ranked by
+            organic revenue, searchable by name, what they sell, category or address, with a rating floor and
+            a claimed-only switch. Agents get the same list from{" "}
+            <code>GET /v1/sellers?q=&amp;minRating=&amp;category=&amp;claimed=1</code> and the MCP tool{" "}
+            <code>assay_find_sellers</code>, so a buyer&rsquo;s agent can pick a reliable seller instead of
+            only checking one it already found.
+          </p>
+        </Panel>
+
+        <Panel title="Raise your rating" id="plan">
+          <p>
+            Every report with revenue carries &ldquo;What would raise this rating&rdquo;: how many more
+            independent customers reach the next rating, what time and activity add, and what identity is
+            worth, each computed by running the real score formula on the changed input. It cannot be gamed:
+            payers you funded or that share your funder are struck out before anything is scored, so the only
+            lever that moves a rating is real customers. Also at <code>GET /v1/address/:address/plan</code>{" "}
+            and the MCP tool <code>assay_rating_plan</code>.
+          </p>
         </Panel>
 
         <Panel title="Independent payers" id="independent">

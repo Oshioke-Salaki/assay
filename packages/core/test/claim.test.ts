@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { checkHttpsUrl, claimMessage, isPrivateHost, isPrivateIp, validateClaim } from "../src/claim.js";
 
 const base = {
-  address: `0x${"a".repeat(40)}`,
+  address: `0x${"a".repeat(40)}` as `0x${string}`,
   action: "claim" as const,
   name: "Cyanos Translate",
   url: "https://cyanos.example",
   x: "cyanos",
   logoUrl: "https://cyanos.example/logo.png",
+  what: "Real-time translation API",
+  category: "ai" as const,
   issuedAt: 1_800_000_000,
   nonce: "0123456789abcdef",
 };
@@ -62,6 +64,21 @@ describe("validateClaim", () => {
     expect(validateClaim({ ...base, x: "has space" })).toMatchObject({ ok: false, error: /X handle/ });
     expect(validateClaim({ ...base, nonce: "short" })).toMatchObject({ ok: false, error: /nonce/ });
     expect(validateClaim({ ...base, address: "0x12" })).toMatchObject({ ok: false, error: /address/ });
+  });
+
+  it("checks what you sell and the category", () => {
+    expect(validateClaim({ ...base, what: "x".repeat(81) })).toMatchObject({ ok: false, error: /80/ });
+    expect(validateClaim({ ...base, what: "<b>hi</b>" })).toMatchObject({ ok: false, error: /angle/ });
+    expect(validateClaim({ ...base, category: "weapons" as never })).toMatchObject({
+      ok: false,
+      error: /Category/,
+    });
+    expect(validateClaim({ ...base, category: "AI" as never })).toMatchObject({
+      ok: true,
+      fields: { category: "ai" },
+    });
+    expect(validateClaim({ ...base, what: "", category: "" }).ok).toBe(true);
+    expect(claimMessage(base)).toContain("what: Real-time translation API");
   });
 
   it("a release needs no name", () => {

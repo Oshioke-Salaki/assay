@@ -76,6 +76,16 @@ client.setSpendControls({
 });
 ```
 
+## Sellers directory and rating plans
+
+```ts
+// Free: reliable sellers, searchable; claimed sellers carry their name and what they sell.
+const { rows } = await assay.sellers({ q: "weather", minRating: "BB", claimedOnly: true });
+
+// Free: what would raise an address's rating, from the real score formula.
+const plan = await assay.plan(seller); // plan.next, plan.customers.forNext, plan.levers, plan.struckOut
+```
+
 ## Alerts, independent payers and badges
 
 ```ts

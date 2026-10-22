@@ -95,6 +95,67 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
   );
 
   server.registerTool(
+    "assay_find_sellers",
+    {
+      title: "Find reliable x402 sellers on Celo",
+      description:
+        "Sellers on Celo ranked by organic revenue (paid by wallets they do not control). Search by name, what they sell, category or address; set a minimum rating; claimed sellers carry their name, website and what they sell. Use it to choose a seller before paying one.",
+      inputSchema: {
+        query: z
+          .string()
+          .max(80)
+          .optional()
+          .describe("Name, what they sell, category, agent id or 0x fragment"),
+        min_rating: z
+          .enum(["AAA", "AA", "A", "BBB", "BB", "B", "CCC"])
+          .optional()
+          .describe("Only this rating or better"),
+        category: z
+          .string()
+          .max(20)
+          .optional()
+          .describe("data, ai, payments, compute, social, commerce, finance, identity, other"),
+        claimed_only: z.boolean().optional().describe("Only sellers whose owner claimed the page"),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ query, min_rating, category, claimed_only, limit }) => {
+      try {
+        return ok(
+          await assay.sellers({
+            q: query,
+            minRating: min_rating,
+            category,
+            claimedOnly: claimed_only,
+            limit: limit ?? 10,
+          }),
+        );
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "assay_rating_plan",
+    {
+      title: "What would raise a seller's rating",
+      description:
+        "For a Celo seller address: the next rating up, how many more independent customers reach it, what time, activity and identity add, and what revenue is struck out and why. Computed from the real score formula; the only lever that moves a rating is real customers.",
+      inputSchema: { address },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ address: a }) => {
+      try {
+        return ok(await assay.plan(a));
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
     "assay_find_agents",
     {
       title: "Find ERC-8004 agents on Celo",

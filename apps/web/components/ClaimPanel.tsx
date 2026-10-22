@@ -1,6 +1,12 @@
 "use client";
 
-import { type ClaimFields, claimMessage, validateClaim } from "assayscore-core";
+import {
+  type ClaimFields,
+  claimMessage,
+  SELLER_CATEGORIES,
+  type SellerCategory,
+  validateClaim,
+} from "assayscore-core";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import styles from "@/components/app.module.css";
@@ -44,6 +50,10 @@ function Inner({
   const [url, setUrl] = useState(claim?.url ?? "");
   const [x, setX] = useState(claim?.x ?? "");
   const [logoUrl, setLogoUrl] = useState(claim?.logoUrl ?? "");
+  const [what, setWhat] = useState(claim?.what ?? "");
+  const [category, setCategory] = useState<SellerCategory | "">(
+    (claim?.category as SellerCategory | null) ?? "",
+  );
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const isOwner = w.isConnected && w.address?.toLowerCase() === subject.toLowerCase();
@@ -57,6 +67,8 @@ function Inner({
       url,
       x,
       logoUrl,
+      what,
+      category,
       issuedAt: Math.floor(Date.now() / 1000),
       nonce: nonce(),
     };
@@ -109,7 +121,7 @@ function Inner({
       <p style={{ maxWidth: "72ch" }}>
         {claim
           ? `This page is claimed as "${claim.name}". The same wallet can change or remove that.`
-          : "Is this your wallet? Put your name on it. You sign one message from the wallet; it moves no money. Your name, website and X handle then appear on this report and in the seller lists."}
+          : "Is this your wallet? Put your name on it. You sign one message from the wallet; it moves no money. Your name, what you sell, website and X handle then appear on this report and in the sellers directory, where buyers' agents look."}
       </p>
 
       {!w.isConnected ? (
@@ -152,6 +164,26 @@ function Inner({
               required
               placeholder="What people call your service"
             />
+          </label>
+          <label>
+            What you sell (optional, shown in the sellers directory)
+            <input
+              value={what}
+              onChange={(e) => setWhat(e.target.value)}
+              maxLength={80}
+              placeholder="e.g. Weather data by the call, Translation API"
+            />
+          </label>
+          <label>
+            Category (optional)
+            <select value={category} onChange={(e) => setCategory(e.target.value as SellerCategory | "")}>
+              <option value="">Choose one</option>
+              {SELLER_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Website (optional)

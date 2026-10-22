@@ -214,6 +214,11 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX watch_deliveries_due ON watch_deliveries (delivered_at, next_at);
   `,
+  // v7: what a claimed seller sells, for the directory.
+  `
+  ALTER TABLE claims ADD COLUMN what TEXT;
+  ALTER TABLE claims ADD COLUMN category TEXT;
+  `,
 ];
 
 export function openDatabase(path: string): DB {

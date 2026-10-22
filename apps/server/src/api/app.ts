@@ -11,6 +11,7 @@ import {
   METHODOLOGY_VERSION,
   normalizeAddress,
   RATING_FLOORS,
+  ratingPlan,
   THIN_FILE,
   TOKENS,
   verdictFor,
@@ -23,7 +24,7 @@ import type { Hash, PublicClient } from "viem";
 import { WATCH_DAYS, type Watches } from "../alerts.js";
 import type { Analysis } from "../analysis.js";
 import type { Attester } from "../attest.js";
-import { applyClaim, readClaim, readClaimNames } from "../claims.js";
+import { applyClaim, readClaim, readClaims } from "../claims.js";
 import type { DB } from "../db.js";
 import type { FxRates } from "../enrich/fx.js";
 import {
@@ -258,17 +259,35 @@ export function createApp(deps: AppDeps): Hono {
     const limit = clampInt(c.req.query("limit"), 1, LIST_LIMIT, 50);
     const offset = clampInt(c.req.query("offset"), 0, 1_000_000, 0);
     const rating = c.req.query("rating");
+    const minRating = c.req.query("minRating");
+    const category = (c.req.query("category") ?? "").trim().toLowerCase();
+    const q = (c.req.query("q") ?? "").trim().toLowerCase().slice(0, 80);
+    const claimedOnly = c.req.query("claimed") === "1";
     const sort = c.req.query("sort") === "gross" ? "gross" : "organic";
-    let rows = analysis.current().summary.sellersRanked;
-    if (rating) rows = rows.filter((r) => r.rating === rating);
-    if (sort === "gross") rows = [...rows].sort((a, b) => b.grossUsd - a.grossUsd);
-    const names = readClaimNames(deps.db);
-    return c.json({
-      total: rows.length,
-      rows: rows
-        .slice(offset, offset + limit)
-        .map((r) => (names.has(r.address) ? { ...r, name: names.get(r.address) } : r)),
+    const claims = readClaims(deps.db);
+    let rows = analysis.current().summary.sellersRanked.map((r) => {
+      const cl = claims.get(r.address);
+      return cl ? { ...r, name: cl.name, what: cl.what, category: cl.category, url: cl.url } : r;
     });
+    if (rating) rows = rows.filter((r) => r.rating === rating);
+    if (minRating) {
+      const order = RATING_FLOORS.map(([x]) => x as string);
+      const at = order.indexOf(minRating);
+      if (at >= 0) rows = rows.filter((r) => order.indexOf(r.rating) >= 0 && order.indexOf(r.rating) <= at);
+    }
+    if (category) rows = rows.filter((r) => "category" in r && r.category === category);
+    if (claimedOnly) rows = rows.filter((r) => "name" in r);
+    if (q)
+      rows = rows.filter(
+        (r) =>
+          r.address.includes(q) ||
+          ("name" in r && (r.name ?? "").toLowerCase().includes(q)) ||
+          ("what" in r && (r.what ?? "").toLowerCase().includes(q)) ||
+          ("category" in r && (r.category ?? "").toLowerCase() === q) ||
+          r.agentIds.some((id) => id === q || `#${id}` === q),
+      );
+    if (sort === "gross") rows = [...rows].sort((a, b) => b.grossUsd - a.grossUsd);
+    return c.json({ total: rows.length, rows: rows.slice(offset, offset + limit) });
   });
 
   app.get("/v1/address/:address", free, cached, (c) => {
@@ -286,6 +305,13 @@ export function createApp(deps: AppDeps): Hono {
       x,
       claim: readClaim(deps.db, address),
     });
+  });
+
+  /** What would raise this address's rating, from the real score formula. Free. */
+  app.get("/v1/address/:address/plan", free, cached, (c) => {
+    const raw = c.req.param("address");
+    if (!isAddress(raw)) return badAddress(c);
+    return c.json(ratingPlan(analysis.assess(normalizeAddress(raw))));
   });
 
   /**

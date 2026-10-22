@@ -5,6 +5,7 @@ import { LogoMark } from "./Logo";
 
 const NAV = [
   { href: "/economy", label: "Economy" },
+  { href: "/sellers", label: "Sellers" },
   { href: "/agents", label: "Agents" },
   { href: "/stats", label: "Stats" },
   { href: "/docs", label: "Docs" },
