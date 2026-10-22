@@ -4,7 +4,7 @@ import { AppShell, ErrorState, Panel } from "@/components/AppShell";
 import styles from "@/components/app.module.css";
 import { Hallmark } from "@/components/Hallmark";
 import { UsageChart, usageParts } from "@/components/UsageChart";
-import { API_PUBLIC, ApiError, api, type Stats } from "@/lib/api";
+import { API_PUBLIC, ApiError, api, type Independent, type Stats, tryApi } from "@/lib/api";
 import { addressUrl, ago, int, pct, short, txUrl, usdFine } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -42,6 +42,7 @@ export default async function StatsPage() {
   }
 
   const days = s.usage?.days ?? [];
+  const outside = s.self ? await tryApi<Independent>(`/v1/independent/${s.self.address}`) : null;
   const sum = days.reduce(
     (a, d) => {
       const p = usageParts(d);
