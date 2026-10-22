@@ -15,6 +15,7 @@ export function Hallmark({
   size = "md",
   tone = "light",
   label,
+  strike = false,
 }: {
   organicUsd: number;
   grossUsd: number;
@@ -22,13 +23,19 @@ export function Hallmark({
   size?: "sm" | "md" | "lg" | "xl" | "fluid";
   tone?: "light" | "dark" | "accent";
   label?: string;
+  /** Punch the marks in one after another when the hallmark first appears. Plays once. */
+  strike?: boolean;
 }) {
   const fine = fineness(organicUsd, grossUsd);
   const words = `${label ? `${label}: ` : ""}rated ${rating === "NR" ? "not rated" : rating}, ${
     fine === null ? "no revenue to assay" : `fineness ${fine} parts per thousand organic`
   }, assayed on Celo`;
   return (
-    <span className={`${styles.row} ${styles[size]} ${styles[tone]}`} role="img" aria-label={words}>
+    <span
+      className={`${styles.row} ${styles[size]} ${styles[tone]} ${strike ? styles.strike : ""}`}
+      role="img"
+      aria-label={words}
+    >
       <span className={`${styles.punch} ${styles.maker}`}>
         <LogoMark size={14} color="currentColor" />
       </span>

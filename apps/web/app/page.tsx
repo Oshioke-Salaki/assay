@@ -269,7 +269,7 @@ export default async function Home() {
           style={{ background: "var(--gold)" }}
         >
           <div className={`${styles.macro} ${styles.hallmarkMacro}`} data-ui>
-            <Hallmark organicUsd={912} grossUsd={1000} rating="AA" size="fluid" />
+            <Hallmark organicUsd={912} grossUsd={1000} rating="AA" size="fluid" strike />
           </div>
           <p className={styles.tileName}>The hallmark</p>
           <p className={styles.tileLine}>Rating, fineness and the office mark, struck in one row.</p>

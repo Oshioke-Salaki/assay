@@ -60,3 +60,43 @@
   color: var(--app-muted);
   font-size: var(--step-small);
 }
+
+/* Refining: the bar starts as one piece of raw metal; in view, the organic part turns to gold and
+   the struck-out parts darken, one after the other. Colour only, so nothing moves or shifts. */
+@media (prefers-reduced-motion: no-preference) {
+  .refine .bar > span {
+    transition:
+      background-color 700ms ease,
+      opacity 700ms ease;
+  }
+
+  .refine:not([data-in]) .bar > span {
+    background-color: var(--silver);
+    background-image: none;
+    opacity: 0.9;
+  }
+
+  .refine[data-in] .loop {
+    transition-delay: 300ms;
+  }
+
+  .refine[data-in] .funded {
+    transition-delay: 550ms;
+  }
+
+  .refine .legend li {
+    transition: opacity 500ms ease;
+  }
+
+  .refine:not([data-in]) .legend li {
+    opacity: 0;
+  }
+
+  .refine[data-in] .legend li:nth-child(2) {
+    transition-delay: 300ms;
+  }
+
+  .refine[data-in] .legend li:nth-child(3) {
+    transition-delay: 550ms;
+  }
+}

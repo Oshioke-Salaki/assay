@@ -1,5 +1,6 @@
 import { usd } from "@/lib/format";
 import styles from "./assaybar.module.css";
+import { InView } from "./InView";
 
 /**
  * Gross revenue split into what survives the assay (organic, in assay gold) and what is
@@ -12,12 +13,15 @@ export function AssayBar({
   loopOffsetUsd,
   fundedUsd,
   legend = true,
+  refine = false,
 }: {
   grossUsd: number;
   organicUsd: number;
   loopOffsetUsd: number;
   fundedUsd: number;
   legend?: boolean;
+  /** Play the refining once the bar scrolls into view: raw metal first, then what burns off. */
+  refine?: boolean;
 }) {
   if (!(grossUsd > 0)) {
     return <p className={styles.empty}>No x402 revenue on record, so there is nothing to assay.</p>;
@@ -31,8 +35,8 @@ export function AssayBar({
   const shares = parts.map((p) => Math.max(0, p.value) / grossUsd);
   const total = shares.reduce((a, b) => a + b, 0);
   const scaled = shares.map((s) => (total > 0 ? s / total : 0));
-  return (
-    <div className={styles.wrap} data-ui>
+  const body = (
+    <>
       <div
         className={styles.bar}
         role="img"
@@ -53,6 +57,13 @@ export function AssayBar({
           ))}
         </ul>
       ) : null}
+    </>
+  );
+  return refine ? (
+    <InView className={`${styles.wrap} ${styles.refine}`}>{body}</InView>
+  ) : (
+    <div className={styles.wrap} data-ui>
+      {body}
     </div>
   );
 }

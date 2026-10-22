@@ -5,6 +5,7 @@ import { AppShell, ErrorState, Panel } from "@/components/AppShell";
 import { AssayBar } from "@/components/AssayBar";
 import styles from "@/components/app.module.css";
 import { DailyChart } from "@/components/DailyChart";
+import { FurnaceLazy } from "@/components/FurnaceLazy";
 import { Hallmark } from "@/components/Hallmark";
 import { ApiError, api, type DailyPoint, type Economy, type SellerRow, type Status, tryApi } from "@/lib/api";
 import { addressUrl, ago, fineness, int, pct, short, usd } from "@/lib/format";
@@ -104,6 +105,9 @@ export default async function EconomyPage() {
 
       <Panel title="Volume per day, last 120 days" span={12}>
         <DailyChart points={daily?.points ?? []} />
+        <div style={{ marginTop: 16 }}>
+          <FurnaceLazy initialSettlements={e.settlements} />
+        </div>
       </Panel>
 
       <Panel

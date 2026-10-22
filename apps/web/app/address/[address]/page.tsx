@@ -9,6 +9,7 @@ import styles from "@/components/app.module.css";
 import { ClaimPanel } from "@/components/ClaimPanel";
 import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
+import { LoopRingLazy } from "@/components/LoopRingLazy";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
 import { XPanel } from "@/components/XPanel";
@@ -138,7 +139,7 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
         aria-label="Verdict"
       >
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
-          <Hallmark organicUsd={s.organicUsd} grossUsd={s.grossUsd} rating={a.rating} size="lg" />
+          <Hallmark organicUsd={s.organicUsd} grossUsd={s.grossUsd} rating={a.rating} size="lg" strike />
           <div>
             <p style={{ fontSize: "2rem", fontWeight: 600, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
               {a.rating === "NR" ? "Not rated" : `${a.rating}, ${a.score ?? 0} of 100`}
@@ -171,6 +172,7 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
           </p>
         ) : (
           <AssayBar
+            refine
             grossUsd={s.grossUsd}
             organicUsd={s.organicUsd}
             loopOffsetUsd={s.loopOffsetUsd}
@@ -214,6 +216,28 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
           </p>
         </div>
       </div>
+
+      {a.loop && a.loop.size > 1 ? (
+        <Panel
+          title="The loop, drawn"
+          span={12}
+          id="loop"
+          action={<span className={styles.muted}>{int(a.loop.size)} wallets</span>}
+        >
+          <LoopRingLazy
+            loopSize={a.loop.size}
+            organicUsd={s.organicUsd}
+            grossUsd={s.grossUsd}
+            inflows={s.payerLines.map((l) => ({
+              address: l.payer,
+              usd: l.usd,
+              inLoop: l.inLoop || l.class === "loop",
+              funded: l.class === "seller-funded" || l.class === "shared-funder",
+            }))}
+            outflows={b.counterparties.map((c) => ({ address: c.payee, usd: c.usd, inLoop: c.inLoop }))}
+          />
+        </Panel>
+      ) : null}
 
       <Panel
         title="Findings"
