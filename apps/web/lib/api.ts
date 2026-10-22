@@ -169,6 +169,8 @@ export interface AddressResponse {
   /** Absent on servers older than the X search; null when not searched yet. */
   x?: XMentions | null;
   claim?: ClaimInfo | null;
+  /** The seller's own words under a finding, by finding code. Never part of a score. */
+  responses?: Record<string, { text: string; updatedAt: number }>;
 }
 
 export interface AgentResponse {

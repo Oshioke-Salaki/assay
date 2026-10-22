@@ -61,6 +61,8 @@ describe("ratingPlan", () => {
     const clean = addr("clean");
     const pc = ratingPlan(assess(new Ledger(payers(clean, 8, 4, 30)), clean, ctx()));
     expect(pc.levers.some((l) => l.code === "identity" && /ERC-8004/.test(l.title))).toBe(true);
+    const both = pc.levers.find((l) => /ERC-8004 identity and add a Self proof/.test(l.title));
+    expect(both?.gain).toBeGreaterThanOrEqual(7);
     expect(pc.levers.some((l) => l.code === "identity" && /Self/.test(l.title))).toBe(true);
 
     const dirty = addr("dirty");

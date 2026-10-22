@@ -10,10 +10,12 @@ import {
   KNOWN_FACILITATORS,
   METHODOLOGY_VERSION,
   normalizeAddress,
+  ownWatchMessage,
   RATING_FLOORS,
   ratingPlan,
   THIN_FILE,
   TOKENS,
+  validateOwnWatch,
   verdictFor,
 } from "assayscore-core";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -39,7 +41,9 @@ import {
 import type { Env } from "../env.js";
 import { BudgetExceeded } from "../lib/buy.js";
 import { log } from "../lib/log.js";
+import { signedShape, verifySigned } from "../lib/signed.js";
 import { proveSettlement } from "../proof.js";
+import { applyResponse, readResponses } from "../responses.js";
 import { classify, type Usage } from "../usage.js";
 import { badgeSvg } from "./badge.js";
 import { independentReport } from "./independent.js";
@@ -72,6 +76,8 @@ export interface AppDeps {
 }
 
 const LIST_LIMIT = 100;
+/** Free alerts for a claimed page's owner last this long per signature. */
+const OWNER_WATCH_DAYS = 90;
 
 export function createApp(deps: AppDeps): Hono {
   const { env, analysis } = deps;
@@ -304,7 +310,77 @@ export function createApp(deps: AppDeps): Hono {
       agents: analysis.agentsFor(address),
       x,
       claim: readClaim(deps.db, address),
+      responses: readResponses(deps.db, address),
     });
+  });
+
+  /** The seller's right of reply: a signed response under one finding, its own words, never scored. */
+  app.post("/v1/respond", free, async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "bad_request", message: "Send the response as JSON." }, 400);
+    }
+    const out = await applyResponse(deps.db, body, { rpc: deps.rpc });
+    if (!out.ok)
+      return c.json(
+        { error: out.status === 401 ? "bad_signature" : "bad_request", message: out.error },
+        out.status,
+      );
+    claimsVersion++;
+    return c.json(
+      out.action === "withdraw" ? { withdrawn: out.code } : { code: out.code, response: out.response },
+    );
+  });
+
+  /**
+   * Free alerts for a claimed page's owner: sign once, get ninety days of webhooks on your own
+   * address. Up to three URLs per address.
+   */
+  app.post("/v1/watch/own", free, async (c) => {
+    if (!deps.watches) return c.json({ error: "not_offered", message: "Alerts are not offered here." }, 503);
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return c.json(
+        { error: "bad_request", message: "Send JSON with address, url, issuedAt, nonce and signature." },
+        400,
+      );
+    }
+    const v = validateOwnWatch(body);
+    if (!v.ok) return c.json({ error: "bad_request", message: v.error }, 400);
+    const now = Math.floor(Date.now() / 1000);
+    const shape = signedShape(v.fields.issuedAt, body.signature, now);
+    if (shape) return c.json({ error: "bad_request", message: shape }, 400);
+    if (!(await verifySigned(v.fields.address, ownWatchMessage(v.fields), String(body.signature), deps.rpc)))
+      return c.json({ error: "bad_signature", message: "The signature does not match this address." }, 401);
+    if (!readClaim(deps.db, v.fields.address))
+      return c.json(
+        { error: "not_claimed", message: "Claim this page first; free alerts come with a claimed page." },
+        403,
+      );
+    const out = deps.watches.create(v.fields.address, v.fields.url, now, {
+      days: OWNER_WATCH_DAYS,
+      note: "owner",
+      maxForAddress: 3,
+    });
+    if (!out.ok) return c.json({ error: "bad_request", message: out.error }, out.status);
+    return c.json(
+      {
+        id: out.id,
+        secret: out.secret,
+        address: v.fields.address,
+        url: v.fields.url,
+        expiresAt: out.expiresAt,
+        renewed: out.renewed,
+        note: out.renewed
+          ? `Extended by ${OWNER_WATCH_DAYS} days. The secret was shown when the alerts were first set up.`
+          : "Keep the secret: deliveries are signed with it, and it manages the alerts. A first delivery, watch.started, is on its way.",
+      },
+      201,
+    );
   });
 
   /** What would raise this address's rating, from the real score formula. Free. */

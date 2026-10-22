@@ -79,6 +79,10 @@ Each address is searched again weekly. A failed search is retried after a day.
 
 **Not scored, on purpose.** Anyone can post "0x… is a scam" about a competitor, and a victim's plea or a bot's bait names an address next to the same words. A score that a post can move is worth nothing. So posts never change a rating, a score, a verdict or a signed attestation. They add one plain sentence to the check's reasons and are listed with links, so a person or an agent can read them before paying. The wording says what the posts contain ("name this address next to words like scam or hack"), not what the seller did.
 
+## The seller's right of reply
+
+A wallet's owner can sign a short response to any finding on its report. It appears under that finding as the seller's own words, dated, and it never changes a score, a verdict or an attestation: the finding stays, the response sits beside it, and the reader weighs both. Responses are plain text, ten to five hundred characters, one per finding, and the same owner can withdraw them.
+
 ## What would raise a rating
 
 Every report with revenue carries a plan, computed by running the score formula above on a changed input: how many more independent customers (each paying what a typical current customer pays) reach the next rating floor; what 10 or 30 more active days add; what one organic payment does to a dormant record; what an ERC-8004 registration or a Self proof is worth, and only when the record is at least half organic. New customers are added to the inverse-Herfindahl exactly, from the current totals. The plan also states what is struck out and how much organic revenue it would take to outweigh it, and, for high ratings, what would lower them. It cannot be gamed: funded and looped payers are struck out before scoring, so the only lever that moves a rating is real revenue from wallets the seller does not control.

@@ -19,6 +19,7 @@ const SECTIONS = [
   ["claim", "Claim your page"],
   ["sellers", "Find sellers"],
   ["plan", "Raise your rating"],
+  ["reply", "Right of reply"],
   ["independent", "Independent payers"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
@@ -358,6 +359,16 @@ POST ${API_PUBLIC}/v1/watch        # x402, $0.05
             payers you funded or that share your funder are struck out before anything is scored, so the only
             lever that moves a rating is real customers. Also at <code>GET /v1/address/:address/plan</code>{" "}
             and the MCP tool <code>assay_rating_plan</code>.
+          </p>
+        </Panel>
+
+        <Panel title="Right of reply" id="reply">
+          <p>
+            A credit bureau lets you dispute. On your own report, connect the wallet and answer any finding in
+            your own words: the response appears under that finding, dated and marked as yours. It never
+            changes the score; the finding stays and readers weigh both. Owners of claimed pages also get free
+            alerts on their own address, ninety days per signature (<code>POST /v1/respond</code>,{" "}
+            <code>POST /v1/watch/own</code>).
           </p>
         </Panel>
 

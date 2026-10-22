@@ -219,6 +219,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE claims ADD COLUMN what TEXT;
   ALTER TABLE claims ADD COLUMN category TEXT;
   `,
+  // v8: a seller's signed response under one finding (its own words, never scored).
+  `
+  CREATE TABLE flag_responses (
+    address    TEXT    NOT NULL,
+    code       TEXT    NOT NULL,
+    text       TEXT    NOT NULL,
+    signature  TEXT    NOT NULL,
+    issued_at  INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (address, code)
+  ) WITHOUT ROWID;
+  `,
 ];
 
 export function openDatabase(path: string): DB {

@@ -17,7 +17,7 @@
 
 ## Built for sellers too
 
-Sellers claim their page (name, what they sell, category, website, X), get a badge, and read a plan that says exactly what would raise their rating, from the real formula. The sellers directory at `/sellers` and the MCP tool `assay_find_sellers` send buyers' agents to reliable sellers, which is why a seller would promote its Assay page.
+Sellers claim their page (name, what they sell, category, website, X), get a badge, read a plan that says exactly what would raise their rating, from the real formula, answer any finding in their own words, and get free alerts on their own address. The sellers directory at `/sellers` and the MCP tool `assay_find_sellers` send buyers' agents to reliable sellers, which is why a seller would promote its Assay page.
 
 ## Built for the organisers too
 

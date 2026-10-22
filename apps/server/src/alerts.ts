@@ -130,21 +130,38 @@ export class Watches {
     address: Address,
     url: string,
     now = nowSec(),
+    opts: { days?: number; note?: string | null; maxForAddress?: number } = {},
   ):
     | { ok: true; id: string; secret: string | null; expiresAt: number; renewed: boolean }
     | { ok: false; status: 400 | 429; error: string } {
     const problem = Watches.urlProblem(url);
     if (problem) return { ok: false, status: 400, error: problem };
     const a = address.toLowerCase() as Address;
+    const days = opts.days ?? WATCH_DAYS;
     const existing = this.db
       .prepare(
         "SELECT * FROM watches WHERE address = ? AND url = ? AND disabled_at IS NULL AND expires_at > ?",
       )
       .get(a, url, now) as WatchRow | undefined;
     if (existing) {
-      const expiresAt = Math.max(existing.expires_at, now) + WATCH_DAYS * DAY;
+      const expiresAt = Math.max(existing.expires_at, now) + days * DAY;
       this.db.prepare("UPDATE watches SET expires_at = ? WHERE id = ?").run(expiresAt, existing.id);
       return { ok: true, id: existing.id, secret: null, expiresAt, renewed: true };
+    }
+    if (opts.maxForAddress !== undefined) {
+      const mine = (
+        this.db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM watches WHERE address = ? AND note = ? AND disabled_at IS NULL AND expires_at > ?",
+          )
+          .get(a, opts.note ?? null, now) as { n: number }
+      ).n;
+      if (mine >= opts.maxForAddress)
+        return {
+          ok: false,
+          status: 429,
+          error: `This address already has ${opts.maxForAddress} free alert URLs. Remove one first.`,
+        };
     }
     const host = new URL(url).hostname.toLowerCase();
     const active = this.db
@@ -154,13 +171,13 @@ export class Watches {
       return { ok: false, status: 429, error: `That host already receives ${MAX_PER_HOST} watches.` };
     const id = `w_${randomBytes(8).toString("hex")}`;
     const secret = randomBytes(32).toString("hex");
-    const expiresAt = now + WATCH_DAYS * DAY;
+    const expiresAt = now + days * DAY;
     const state = this.currentState(a);
     this.db
       .prepare(
-        "INSERT INTO watches (id, address, url, secret, created_at, expires_at, last_state, failures) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+        "INSERT INTO watches (id, address, url, secret, created_at, expires_at, last_state, failures, note) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
       )
-      .run(id, a, url, secret, now, expiresAt, JSON.stringify(state));
+      .run(id, a, url, secret, now, expiresAt, JSON.stringify(state), opts.note ?? null);
     this.enqueue(
       { id, address: a } as WatchRow,
       "watch.started",

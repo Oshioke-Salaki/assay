@@ -3,9 +3,14 @@
 import {
   type ClaimFields,
   claimMessage,
+  type FindingCode,
+  ownWatchMessage,
+  responseMessage,
   SELLER_CATEGORIES,
   type SellerCategory,
   validateClaim,
+  validateOwnWatch,
+  validateResponse,
 } from "assayscore-core";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,7 +21,17 @@ import { WalletProviders } from "./wallet/Providers";
 import { AssayNotice, useWallet, walletErrorMessage } from "./wallet/useWallet";
 import { WalletPicker } from "./wallet/WalletPicker";
 
-export function ClaimPanel(props: { subject: `0x${string}`; claim: ClaimInfo | null; siteUrl: string }) {
+export interface ClaimPanelProps {
+  subject: `0x${string}`;
+  claim: ClaimInfo | null;
+  siteUrl: string;
+  /** The findings on this report that the owner may answer. */
+  findings?: { code: string; title: string }[];
+  responses?: Record<string, { text: string; updatedAt: number }>;
+  alertsOffered?: boolean;
+}
+
+export function ClaimPanel(props: ClaimPanelProps) {
   return (
     <WalletProviders>
       <Inner {...props} />
@@ -38,11 +53,10 @@ function Inner({
   subject,
   claim,
   siteUrl,
-}: {
-  subject: `0x${string}`;
-  claim: ClaimInfo | null;
-  siteUrl: string;
-}) {
+  findings = [],
+  responses = {},
+  alertsOffered = false,
+}: ClaimPanelProps) {
   const w = useWallet();
   const router = useRouter();
   const toast = useToast();
@@ -56,6 +70,11 @@ function Inner({
   );
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  const [replies, setReplies] = useState<Record<string, string>>(
+    Object.fromEntries(findings.map((f) => [f.code, responses[f.code]?.text ?? ""])),
+  );
+  const [hookUrl, setHookUrl] = useState("");
+  const [hook, setHook] = useState<{ id: string; secret: string | null; expiresAt: number } | null>(null);
   const isOwner = w.isConnected && w.address?.toLowerCase() === subject.toLowerCase();
 
   async function submit(action: "claim" | "release") {
@@ -101,6 +120,81 @@ function Inner({
     } catch (err) {
       const text = walletErrorMessage(err);
       setNote({ tone: "bad", text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signedPost(path: string, message: string, fields: object) {
+    const client = w.walletClient;
+    if (!client || !w.address) throw new AssayNotice("Wallet not ready yet. Try again.");
+    const signature = await client.signMessage({ account: w.address, message });
+    const res = await fetch(`${API_PUBLIC}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...fields, signature }),
+    });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown> & { message?: string };
+    if (!res.ok) throw new AssayNotice(body.message ?? `Assay answered ${res.status}.`);
+    return body;
+  }
+
+  async function respond(code: string, action: "respond" | "withdraw") {
+    setNote(null);
+    const v = validateResponse({
+      address: subject,
+      code: code as FindingCode,
+      action,
+      text: replies[code] ?? "",
+      issuedAt: Math.floor(Date.now() / 1000),
+      nonce: nonce(),
+    });
+    if (!v.ok) {
+      setNote({ tone: "bad", text: v.error });
+      return;
+    }
+    try {
+      setBusy(true);
+      await signedPost("/v1/respond", responseMessage(v.fields), v.fields);
+      setNote({
+        tone: "ok",
+        text:
+          action === "respond"
+            ? "Your response is saved and shows under the finding within a minute."
+            : "Response withdrawn.",
+      });
+      toast({ tone: "success", title: action === "respond" ? "Response posted" : "Response withdrawn" });
+      router.refresh();
+    } catch (err) {
+      setNote({ tone: "bad", text: walletErrorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startAlerts() {
+    setNote(null);
+    const v = validateOwnWatch({
+      address: subject,
+      url: hookUrl,
+      issuedAt: Math.floor(Date.now() / 1000),
+      nonce: nonce(),
+    });
+    if (!v.ok) {
+      setNote({ tone: "bad", text: v.error });
+      return;
+    }
+    try {
+      setBusy(true);
+      const body = (await signedPost("/v1/watch/own", ownWatchMessage(v.fields), v.fields)) as unknown as {
+        id: string;
+        secret: string | null;
+        expiresAt: number;
+      };
+      setHook(body);
+      toast({ tone: "success", title: "Alerts on" });
+    } catch (err) {
+      setNote({ tone: "bad", text: walletErrorMessage(err) });
     } finally {
       setBusy(false);
     }
@@ -238,6 +332,97 @@ function Inner({
           </p>
         </form>
       )}
+      {isOwner && findings.length > 0 ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          <p style={{ fontWeight: 600 }}>Answer a finding</p>
+          <p className={styles.muted} style={{ maxWidth: "72ch" }}>
+            Your words appear under the finding, dated and marked as yours. They never change the score;
+            readers weigh both. Plain text, 10 to 500 characters.
+          </p>
+          {findings.map((f) => (
+            <div key={f.code} className={styles.form} style={{ maxWidth: 640 }}>
+              <label>
+                {f.title}
+                <textarea
+                  value={replies[f.code] ?? ""}
+                  onChange={(e) => setReplies({ ...replies, [f.code]: e.target.value })}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="What a reader should know about this finding"
+                />
+              </label>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  className="btn btn--ink"
+                  disabled={busy}
+                  onClick={() => void respond(f.code, "respond")}
+                >
+                  {responses[f.code] ? "Sign and update" : "Sign and post"}
+                </button>
+                {responses[f.code] ? (
+                  <button
+                    type="button"
+                    className="btn btn--quiet"
+                    disabled={busy}
+                    onClick={() => void respond(f.code, "withdraw")}
+                  >
+                    Withdraw
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {isOwner && alertsOffered ? (
+        <div style={{ display: "grid", gap: 8, maxWidth: 640 }}>
+          <p style={{ fontWeight: 600 }}>Alerts for your address{claim ? "" : " (claim the page first)"}</p>
+          <p className={styles.muted} style={{ maxWidth: "72ch" }}>
+            Free with a claimed page: a signed webhook when your rating or verdict changes, a critical finding
+            appears, or warning posts about you show up on X. Ninety days per signature; sign again to extend.
+          </p>
+          {hook ? (
+            <p className={`${styles.notice} ${styles.noticeGood}`} style={{ overflowWrap: "anywhere" }}>
+              Alerts on until {new Date(hook.expiresAt * 1000).toLocaleDateString("en-GB")}. Watch id{" "}
+              <code>{hook.id}</code>
+              {hook.secret ? (
+                <>
+                  . Secret (shown once, deliveries are signed with it): <code>{hook.secret}</code>
+                </>
+              ) : (
+                ". Extended; the secret was shown when alerts were first set up."
+              )}
+            </p>
+          ) : (
+            <div className={styles.form}>
+              <label>
+                Webhook URL (https, public)
+                <input
+                  value={hookUrl}
+                  onChange={(e) => setHookUrl(e.target.value)}
+                  maxLength={500}
+                  placeholder="https://your.app/assay-webhook"
+                  inputMode="url"
+                  disabled={!claim}
+                />
+              </label>
+              <div>
+                <button
+                  type="button"
+                  className="btn btn--ink"
+                  disabled={busy || !claim}
+                  onClick={() => void startAlerts()}
+                >
+                  Sign and start alerts
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {note ? (
         <p
           role="status"

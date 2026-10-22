@@ -66,11 +66,21 @@ export interface XMentions {
   tx: string | null;
 }
 
+export interface FindingResponse {
+  text: string;
+  updatedAt: number;
+}
+
 export interface AddressReport {
   asOf: number;
   check: CheckResult;
   // The full assessment is typed loosely here; see assayscore-core's Assessment.
-  assessment: Record<string, unknown> & { rating: Rating; score: number | null };
+  assessment: Record<string, unknown> & {
+    rating: Rating;
+    score: number | null;
+    /** The seller's own words under a finding, by finding code. Never part of a score. */
+    responses?: Record<string, FindingResponse>;
+  };
   agents: unknown[];
   /** Null until Assay has searched X for this address. */
   x?: XMentions | null;

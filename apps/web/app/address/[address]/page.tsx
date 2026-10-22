@@ -69,6 +69,7 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
   }
   const { assessment: a, agents, x } = data;
   const claim = data.claim ?? null;
+  const responses = data.responses ?? {};
   const [independent, plan] = await Promise.all([
     a.seller.payers > 0 ? tryApi<Independent>(`/v1/independent/${address}`) : Promise.resolve(null),
     a.seller.grossUsd > 0 ? tryApi<RatingPlan>(`/v1/address/${address}/plan`) : Promise.resolve(null),
@@ -266,6 +267,19 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
                 <span className={styles.flagTitle}>{f.title}</span>
                 <span className={styles.flagUsd}>{f.usd !== undefined ? usd(f.usd) : ""}</span>
                 <span className={styles.flagDetail}>{f.detail}</span>
+                {responses[f.code] ? (
+                  <span className={styles.flagDetail} style={{ marginTop: 6 }}>
+                    <span className={`${styles.notice}`} style={{ display: "block", whiteSpace: "pre-wrap" }}>
+                      <strong>Seller&rsquo;s response</strong>
+                      <span className={styles.muted}>
+                        {" "}
+                        · {date(responses[f.code]!.updatedAt)} · signed by this wallet, not checked by Assay
+                      </span>
+                      {"\n"}
+                      {responses[f.code]!.text}
+                    </span>
+                  </span>
+                ) : null}
                 {(f.txs?.length ?? 0) + (f.addresses?.length ?? 0) > 0 ? (
                   <span className={styles.flagEvidence}>
                     {f.txs?.map((t) => (
@@ -455,7 +469,16 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
       </Panel>
 
       <Panel title={claim ? "Your page" : "Claim this page"} span={12} id="claim">
-        <ClaimPanel subject={address} claim={claim} siteUrl={siteUrl} />
+        <ClaimPanel
+          subject={address}
+          claim={claim}
+          siteUrl={siteUrl}
+          findings={a.flags
+            .filter((f) => f.severity !== "positive")
+            .map((f) => ({ code: f.code, title: f.title }))}
+          responses={responses}
+          alertsOffered
+        />
       </Panel>
 
       {a.components ? (

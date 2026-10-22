@@ -73,3 +73,7 @@ Four pieces of motion, each performing the data rather than decorating it, all w
 ## Sellers directory and rating plans
 
 `GET /v1/sellers` joins the ranked sellers from the analysis snapshot with `claims` (name, what, category, website) and filters by text, rating floor, category and claim; the site's `/sellers` page is that endpoint with a form. `packages/core/src/plan.ts` builds the rating plan from an assessment alone: it re-runs `scoreFrom` with changed inputs (customers added to the inverse-Herfindahl from the current totals, more active days, dormancy lifted, identity points when the record is at least half organic) and reports the score after each. Served at `GET /v1/address/:address/plan`, shown on every report with revenue, and exposed through the SDK (`plan`, `sellers`) and MCP (`assay_rating_plan`, `assay_find_sellers`).
+
+## Right of reply and owner alerts
+
+`flag_responses` holds one signed response per (address, finding code); `apps/server/src/responses.ts` verifies the signature the same way claims are verified (`apps/server/src/lib/signed.ts`: ten-minute validity, offline recovery for EOAs, chain verification for smart wallets). Responses are returned with the report and shown under the finding; nothing reads them for scoring. `POST /v1/watch/own` creates a ninety-day watch for a claimed address from a signed message, through the same `Watches.create` as paid watches (note `owner`, at most three per address).

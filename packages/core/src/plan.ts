@@ -183,6 +183,13 @@ export function ratingPlan(a: Assessment): RatingPlan {
   // Identity: only on a clean record.
   if (c.quality >= 0.5) {
     const human = a.identity.human;
+    if (a.identity.agentIds.length === 0 && !human)
+      lever(
+        "identity",
+        "Register an ERC-8004 identity and add a Self proof",
+        "Together worth 8 points on a record that is at least half organic: 3 for the registration, 5 for a fresh passport proof.",
+        scoreFrom({ ...base, identityBonus: c.identityBonus + 8 }),
+      );
     if (a.identity.agentIds.length === 0)
       lever(
         "identity",

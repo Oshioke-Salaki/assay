@@ -922,3 +922,137 @@ describe("sellers directory and rating plans", () => {
     expect((await get(app, "/v1/address/nope/plan")).status).toBe(400);
   });
 });
+
+describe("the seller's right of reply, and free alerts for owners", () => {
+  const KEY = `0x${"88".repeat(32)}` as const;
+  async function account() {
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const acct = privateKeyToAccount(KEY);
+    return { acct, address: acct.address.toLowerCase() as `0x${string}` };
+  }
+  const postJson = (app: ReturnType<typeof build>["app"], path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("stores a signed response under a finding, shows it on the report, and lets the owner withdraw it", async () => {
+    const { app } = build();
+    const { acct, address } = await account();
+    const { responseMessage } = await import("assayscore-core");
+    const fields = {
+      address,
+      code: "SELLER_FUNDED_PAYERS" as const,
+      action: "respond" as const,
+      text: "We sponsored gas for new users in March; those wallets are customers, not ours.",
+      issuedAt: Math.floor(Date.now() / 1000),
+      nonce: "0123456789abcdef",
+    };
+    const signature = await acct.signMessage({ message: responseMessage(fields) });
+    const res = await postJson(app, "/v1/respond", { ...fields, signature });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ code: "SELLER_FUNDED_PAYERS", response: { text: fields.text } });
+    const report = (await (await get(app, `/v1/address/${address}`)).json()) as {
+      responses: Record<string, { text: string }>;
+    };
+    expect(report.responses.SELLER_FUNDED_PAYERS?.text).toBe(fields.text);
+    // Tampered text: the signature no longer matches.
+    expect(
+      (await postJson(app, "/v1/respond", { ...fields, text: `${fields.text} Trust us.`, signature })).status,
+    ).toBe(401);
+    // Unknown finding and short text are refused before any signature check.
+    expect((await postJson(app, "/v1/respond", { ...fields, code: "MADE_UP", signature })).status).toBe(400);
+    const withdraw = { ...fields, action: "withdraw" as const, text: "", nonce: "fedcba9876543210" };
+    const ws = await acct.signMessage({ message: responseMessage(withdraw) });
+    expect(await (await postJson(app, "/v1/respond", { ...withdraw, signature: ws })).json()).toEqual({
+      withdrawn: "SELLER_FUNDED_PAYERS",
+    });
+    const after = (await (await get(app, `/v1/address/${address}`)).json()) as {
+      responses: Record<string, unknown>;
+    };
+    expect(after.responses).toEqual({});
+  });
+
+  it("gives a claimed owner free alerts for its own address, three URLs at most, and nothing to the unclaimed", async () => {
+    const env = testEnv({ CORS_ORIGINS: "https://assay.example", FREE_RATE_PER_MIN: "1000" });
+    const db = memoryDb();
+    seed(db);
+    const analysis = new Analysis(db, 0);
+    const watches = new Watches(db, analysis, {
+      fetchImpl: (async () => new Response("", { status: 200 })) as unknown as typeof fetch,
+      lookup: async () => [{ address: "93.184.216.34" }],
+    });
+    const app = createApp({
+      env,
+      db,
+      analysis,
+      fx: fixedFx(db),
+      rpc: {} as PublicClient,
+      attester: null,
+      status: () => ({
+        settlementsBlock: 100,
+        registryBlock: 100,
+        finalizedHead: 120,
+        lastSettlementTs: null,
+      }),
+      syncFacilitatorOnStart: false,
+      watches,
+    });
+    const { acct, address } = await account();
+    const { ownWatchMessage } = await import("assayscore-core");
+    const sign = async (url: string, nonce: string) => {
+      const fields = { address, url, issuedAt: Math.floor(Date.now() / 1000), nonce };
+      return { ...fields, signature: await acct.signMessage({ message: ownWatchMessage(fields) }) };
+    };
+    // Not claimed yet: refused, even with a good signature.
+    const unclaimed = await postJson(
+      app,
+      "/v1/watch/own",
+      await sign("https://hooks.example/a", "0123456789abcdef"),
+    );
+    expect(unclaimed.status).toBe(403);
+    db.prepare(
+      "INSERT INTO claims (address, name, url, logo_url, x, what, category, signature, issued_at, updated_at) VALUES (?, 'Mine', NULL, NULL, NULL, NULL, NULL, '0x00', 1, 1)",
+    ).run(address);
+    const made = await postJson(
+      app,
+      "/v1/watch/own",
+      await sign("https://hooks.example/a", "0123456789abcdef"),
+    );
+    expect(made.status).toBe(201);
+    const body = (await made.json()) as { id: string; secret: string; expiresAt: number; renewed: boolean };
+    expect(body.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.expiresAt - Math.floor(Date.now() / 1000)).toBeGreaterThan(89 * 86_400);
+    // Same URL again extends rather than duplicates.
+    expect(
+      (
+        (await (
+          await postJson(app, "/v1/watch/own", await sign("https://hooks.example/a", "1111111111111111"))
+        ).json()) as { renewed: boolean }
+      ).renewed,
+    ).toBe(true);
+    for (const n of ["b", "c"])
+      expect(
+        (await postJson(app, "/v1/watch/own", await sign(`https://hooks.example/${n}`, `${n.repeat(16)}`)))
+          .status,
+      ).toBe(201);
+    const fourth = await postJson(
+      app,
+      "/v1/watch/own",
+      await sign("https://hooks.example/d", "dddddddddddddddd"),
+    );
+    expect(fourth.status).toBe(429);
+    // Bad URL and a forged signature.
+    expect(
+      (await postJson(app, "/v1/watch/own", await sign("http://hooks.example/z", "eeeeeeeeeeeeeeee"))).status,
+    ).toBe(400);
+    const forged = await sign("https://hooks.example/z", "ffffffffffffffff");
+    expect((await postJson(app, "/v1/watch/own", { ...forged, url: "https://evil.example/z" })).status).toBe(
+      401,
+    );
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM watches WHERE note = 'owner'").get() as { n: number }).n,
+    ).toBe(3);
+  });
+});
