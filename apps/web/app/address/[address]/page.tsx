@@ -9,6 +9,7 @@ import styles from "@/components/app.module.css";
 import { ClaimPanel } from "@/components/ClaimPanel";
 import { Hallmark } from "@/components/Hallmark";
 import { HallmarkKey } from "@/components/HallmarkKey";
+import { HashScroll } from "@/components/HashScroll";
 import { LoopRingLazy } from "@/components/LoopRingLazy";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
 import { PlanPanel } from "@/components/PlanPanel";
@@ -89,6 +90,7 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
 
   return (
     <AppShell>
+      <HashScroll />
       <div className={styles.titleRow}>
         <div style={{ minWidth: 0 }}>
           <p className={styles.crumbs}>
