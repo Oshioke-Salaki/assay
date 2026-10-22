@@ -301,6 +301,63 @@ export default async function StatsPage() {
               Assay funded are struck out, so this is the honest count of its independent customers. It will
               change only when wallets Assay never funded pay for checks or hallmarks.
             </p>
+            {outside && outside.rows.length > 0 ? (
+              <div className={styles.scroll}>
+                <table className={styles.table}>
+                  <caption className="sr-only">
+                    Every wallet that has paid Assay, by the hackathon's independent-user rule
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Wallet that paid Assay</th>
+                      <th scope="col">Counts as independent?</th>
+                      <th scope="col" className={styles.r}>
+                        Paid
+                      </th>
+                      <th scope="col" className={`${styles.r} ${styles.hideSm}`}>
+                        In the window
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outside.rows.map((r) => (
+                      <tr key={r.payer}>
+                        <td>
+                          <Link href={`/address/${r.payer}`}>{short(r.payer)}</Link>
+                        </td>
+                        <td>
+                          <span
+                            className={`${styles.pill} ${r.independent === true ? styles.pillGood : r.independent === false ? styles.pillBad : styles.pillWarn}`}
+                          >
+                            {r.independent === true
+                              ? "yes"
+                              : r.independent === false
+                                ? "no"
+                                : "not traced yet"}
+                          </span>
+                          {r.reasons.length > 0 ? (
+                            <div className={styles.muted}>{r.reasons.join("; ")}</div>
+                          ) : null}
+                        </td>
+                        <td className={styles.r}>
+                          {usdFine(r.usd)}
+                          <div className={styles.muted}>
+                            {int(r.count)} payment{r.count === 1 ? "" : "s"}
+                          </div>
+                        </td>
+                        <td className={`${styles.r} ${styles.hideSm}`}>
+                          {r.inWindow.count > 0 ? (
+                            usdFine(r.inWindow.usd)
+                          ) : (
+                            <span className={styles.muted}>–</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         )}
       </Panel>
