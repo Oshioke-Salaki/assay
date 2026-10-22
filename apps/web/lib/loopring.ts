@@ -70,6 +70,10 @@ export function layoutRing(
   // Loop members first, then the rest, so the ring reads as two arcs.
   const ordered = [...spokes].sort((a, b) => Number(b.inLoop) - Number(a.inLoop) || b.usd - a.usd);
   const n = ordered.length;
+  // Nodes shrink as the ring fills, so a crowded ring stays a ring of dots, not a solid band.
+  const spacing = (2 * Math.PI * radius) / Math.max(1, n);
+  const maxR = Math.max(1.6, Math.min(8, spacing / 2.6));
+  const minR = Math.min(2.5, maxR);
   return ordered.map((s, i) => {
     const angle = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2;
     return {
@@ -77,7 +81,7 @@ export function layoutRing(
       angle,
       x: cx + Math.cos(angle) * radius,
       y: cy + Math.sin(angle) * radius,
-      r: 2.5 + 5.5 * Math.sqrt(s.usd / maxUsd),
+      r: minR + (maxR - minR) * Math.sqrt(s.usd / maxUsd),
     };
   });
 }

@@ -48,6 +48,18 @@ describe("layoutRing", () => {
     expect(out[0]?.r).toBe(8); // the biggest flow gets the biggest node
   });
 
+  it("shrinks nodes when the ring is crowded, so they never merge into a band", () => {
+    const many = Array.from({ length: 96 }, (_, i) => ({
+      address: a(i),
+      usd: 100,
+      inLoop: true,
+      dir: "both" as const,
+    }));
+    const out = layoutRing(many, 1040, 300);
+    const spacing = (2 * Math.PI * (150 - 28)) / 96;
+    for (const s of out) expect(s.r * 2).toBeLessThan(spacing);
+  });
+
   it("copes with one spoke and a tiny box", () => {
     const out = layoutRing([{ address: a(1), usd: 0, inLoop: false, dir: "in" as const }], 50, 50);
     expect(out).toHaveLength(1);
