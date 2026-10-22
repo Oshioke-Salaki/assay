@@ -77,3 +77,7 @@ Four pieces of motion, each performing the data rather than decorating it, all w
 ## Right of reply and owner alerts
 
 `flag_responses` holds one signed response per (address, finding code); `apps/server/src/responses.ts` verifies the signature the same way claims are verified (`apps/server/src/lib/signed.ts`: ten-minute validity, offline recovery for EOAs, chain verification for smart wallets). Responses are returned with the report and shown under the finding; nothing reads them for scoring. `POST /v1/watch/own` creates a ninety-day watch for a claimed address from a signed message, through the same `Watches.create` as paid watches (note `owner`, at most three per address).
+
+## Payer checks
+
+`packages/core/src/payer.ts` turns a payer's assessment (buyer side, funding, identity) and, when a seller is named, that seller's payer line for it, into a four-way verdict with plain reasons. Served free at `GET /v1/payer/:address?seller=`, shown as "Check a payer" on every report with revenue, and exposed through the SDK (`payer`) and MCP (`assay_check_payer`).

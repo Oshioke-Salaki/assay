@@ -12,6 +12,7 @@ import { HallmarkKey } from "@/components/HallmarkKey";
 import { HashScroll } from "@/components/HashScroll";
 import { LoopRingLazy } from "@/components/LoopRingLazy";
 import { CounterpartiesTable, PayersTable } from "@/components/PagedTables";
+import { PayerCheck } from "@/components/PayerCheck";
 import { PlanPanel } from "@/components/PlanPanel";
 import { PublishHallmark } from "@/components/wallet/PublishHallmark";
 import { XPanel } from "@/components/XPanel";
@@ -453,6 +454,12 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             you or your own funder, and was active on Celo before the window started. Assay already traces all
             three, so any team can check its own numbers here. Wallets you created and funded never count.
           </p>
+        </Panel>
+      ) : null}
+
+      {s.grossUsd > 0 ? (
+        <Panel title="Check a payer" span={12} id="payer">
+          <PayerCheck seller={address} />
         </Panel>
       ) : null}
 

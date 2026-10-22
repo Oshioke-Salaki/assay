@@ -76,6 +76,13 @@ client.setSpendControls({
 });
 ```
 
+## Payer checks, for sellers
+
+```ts
+// Free: before a refund, an allowance or credit, is this payer a real wallet or a sock?
+const p = await assay.payer(payer, { seller: me }); // p.verdict: established | new | caution | block, p.reasons
+```
+
 ## Sellers directory and rating plans
 
 ```ts

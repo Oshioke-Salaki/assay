@@ -17,10 +17,11 @@ async function connect(fetchImpl: typeof fetch) {
 }
 
 describe("Assay MCP tools", () => {
-  it("lists seven read-only tools", async () => {
+  it("lists eight read-only tools", async () => {
     const client = await connect(vi.fn());
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "assay_check_payer",
       "assay_check_seller",
       "assay_economy",
       "assay_find_agents",

@@ -1056,3 +1056,38 @@ describe("the seller's right of reply, and free alerts for owners", () => {
     ).toBe(3);
   });
 });
+
+describe("payer checks for sellers", () => {
+  it("judges a payer on its own record and on how it stands to the seller asking", async () => {
+    const { app } = build();
+    const customer = CUSTOMERS[0]!;
+    const alone = (await (await get(app, `/v1/payer/${customer}`)).json()) as {
+      verdict: string;
+      reasons: string[];
+      withSeller: null;
+    };
+    expect(["established", "new", "caution", "block"]).toContain(alone.verdict);
+    expect(alone.withSeller).toBeNull();
+    const toShop = (await (await get(app, `/v1/payer/${customer}?seller=${SHOP}`)).json()) as {
+      withSeller: { class: string; count: number };
+      reasons: string[];
+    };
+    expect(toShop.withSeller.count).toBeGreaterThan(0);
+    expect(toShop.reasons[0]).toMatch(/Has paid you/);
+    const stranger = (await (await get(app, `/v1/payer/${customer}?seller=0x${"e".repeat(40)}`)).json()) as {
+      withSeller: { class: string };
+      reasons: string[];
+    };
+    expect(stranger.withSeller.class).toBe("none");
+    expect(stranger.reasons[0]).toBe("Has never paid you.");
+    // A ring member is blocked on its own record.
+    const ring = (await (await get(app, `/v1/payer/${RING[0]}`)).json()) as {
+      verdict: string;
+      loopShare: number;
+    };
+    expect(ring.verdict).toBe("block");
+    expect(ring.loopShare).toBeGreaterThan(0.5);
+    expect((await get(app, "/v1/payer/nope")).status).toBe(400);
+    expect((await get(app, `/v1/payer/${customer}?seller=nope`)).status).toBe(400);
+  });
+});

@@ -11,6 +11,7 @@ import {
   METHODOLOGY_VERSION,
   normalizeAddress,
   ownWatchMessage,
+  payerCheck,
   RATING_FLOORS,
   ratingPlan,
   THIN_FILE,
@@ -381,6 +382,24 @@ export function createApp(deps: AppDeps): Hono {
       },
       201,
     );
+  });
+
+  /**
+   * A payer check, for sellers: is this wallet an established customer or a sock? With
+   * `?seller=0x…`, also how it stands to that seller (funded by it, in its loop, a real customer).
+   */
+  app.get("/v1/payer/:address", free, cached, (c) => {
+    const raw = c.req.param("address");
+    if (!isAddress(raw)) return badAddress(c);
+    const payer = normalizeAddress(raw);
+    const sellerRaw = c.req.query("seller");
+    if (sellerRaw !== undefined && !isAddress(sellerRaw))
+      return c.json({ error: "bad_address", message: "seller must be a 0x-prefixed 20-byte address." }, 400);
+    const seller = sellerRaw ? normalizeAddress(sellerRaw) : undefined;
+    const sellerLine = seller
+      ? (analysis.assess(seller).seller.payerLines.find((l) => l.payer === payer) ?? null)
+      : null;
+    return c.json(payerCheck(analysis.assess(payer), { seller, sellerLine }));
   });
 
   /** What would raise this address's rating, from the real score formula. Free. */

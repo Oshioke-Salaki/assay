@@ -1,7 +1,7 @@
-import type { RatingPlan } from "assayscore-core";
+import type { PayerCheck, RatingPlan } from "assayscore-core";
 import { type Address, type CheckResult, isAddress, RATING_CODES, type Rating } from "assayscore-core";
 
-export type { Address, CheckResult, Rating, RatingPlan } from "assayscore-core";
+export type { Address, CheckResult, PayerCheck, Rating, RatingPlan } from "assayscore-core";
 
 type Fetch = typeof fetch;
 type FetchInput = Parameters<typeof fetch>[0];
@@ -234,6 +234,12 @@ export function createAssay(opts: AssayOptions = {}) {
       const qs = p.toString();
       return call<{ total: number; rows: SellerRow[] }>(plain, `/v1/sellers${qs ? `?${qs}` : ""}`);
     },
+    /** Free, for sellers: is this payer an established customer or a sock, and how does it stand to `seller`? */
+    payer: (a: string, q: { seller?: string } = {}) =>
+      call<PayerCheck>(
+        plain,
+        `/v1/payer/${requireAddress(a)}${q.seller ? `?seller=${requireAddress(q.seller)}` : ""}`,
+      ),
     /** Free: what would raise an address's rating, from the real score formula. */
     plan: (a: string) => call<RatingPlan>(plain, `/v1/address/${requireAddress(a)}/plan`),
     /** Free: which of a seller's payers count as independent users by the hackathon's rule, with reasons. */

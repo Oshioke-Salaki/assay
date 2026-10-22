@@ -29,6 +29,7 @@ All tools are read-only and free. The server never holds a wallet.
 | Tool | What it answers |
 | --- | --- |
 | `assay_check_seller` | pass, caution or block for a Celo address, with rating, organic revenue share, reasons and what X says. Call it before paying an unfamiliar x402 seller. With a paying client, `fresh_x: true` buys an X search for the address on the spot ($0.01). |
+| `assay_check_payer` | for sellers: is this payer an established customer or a sock, and how does it stand to you? |
 | `assay_find_sellers` | reliable sellers on Celo, searchable by name, what they sell, category or address, with a minimum rating. |
 | `assay_rating_plan` | what would raise a seller's rating: customers needed for the next rating, time, activity and identity, and what is struck out. |
 | `assay_independent_payers` | which of a seller's payers count as independent users by the hackathon's rule, with reasons and volume in the window. |

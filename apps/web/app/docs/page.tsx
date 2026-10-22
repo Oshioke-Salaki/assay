@@ -20,6 +20,7 @@ const SECTIONS = [
   ["sellers", "Find sellers"],
   ["plan", "Raise your rating"],
   ["reply", "Right of reply"],
+  ["payer", "Check a payer"],
   ["independent", "Independent payers"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
@@ -369,6 +370,16 @@ POST ${API_PUBLIC}/v1/watch        # x402, $0.05
             changes the score; the finding stays and readers weigh both. Owners of claimed pages also get free
             alerts on their own address, ninety days per signature (<code>POST /v1/respond</code>,{" "}
             <code>POST /v1/watch/own</code>).
+          </p>
+        </Panel>
+
+        <Panel title="Check a payer" id="payer">
+          <p>
+            The mirror of the pre-payment check, for sellers. Before a refund, an allowance or credit, paste a
+            payer&rsquo;s address on your report: established customer, new wallet, caution or block, with the
+            reasons in plain words (age on Celo, who funded it, how many sellers it pays, loop share,
+            identity, and how it stands to you). Also at <code>GET /v1/payer/:address?seller=0x…</code> and
+            the MCP tool <code>assay_check_payer</code>.
           </p>
         </Panel>
 

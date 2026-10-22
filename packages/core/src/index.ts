@@ -7,6 +7,7 @@ export * from "./economy.js";
 export * from "./format.js";
 export * from "./independent.js";
 export * from "./ledger.js";
+export * from "./payer.js";
 export * from "./plan.js";
 export * from "./reply.js";
 export * from "./types.js";

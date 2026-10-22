@@ -138,6 +138,27 @@ export function registerTools(server: McpServer, assay: AssayClient, opts: { pai
   );
 
   server.registerTool(
+    "assay_check_payer",
+    {
+      title: "Check a payer before a refund, allowance or credit",
+      description:
+        "For sellers: is this wallet an established customer or a sock? Uses its whole x402 record on Celo (age, funding source, how many sellers it pays, loop share, identity). Pass your own address as seller to also learn how it stands to you: funded by you, in your loop, or a real customer.",
+      inputSchema: {
+        address,
+        seller: address.optional().describe("Your seller address, for the relationship"),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ address: a, seller }) => {
+      try {
+        return ok(await assay.payer(a, { seller }));
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
     "assay_rating_plan",
     {
       title: "What would raise a seller's rating",
