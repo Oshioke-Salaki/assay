@@ -26,21 +26,35 @@ Alongside the ledger, Assay searches X for every seller's exact address, paid pe
 
 ## Run it
 
+You need Node 22.12 or later, pnpm 10 (`corepack enable` gives you the pinned version), and, for the contracts, [Foundry](https://getfoundry.sh) 1.0 or later. Nothing below needs a wallet, an API key or funds.
+
 ```sh
+git clone --recurse-submodules https://github.com/Oshioke-Salaki/assay
+cd assay
 pnpm install
-pnpm build
-cp apps/server/.env.example apps/server/.env      # fill in what you need; everything is optional for a read-only node
-pnpm --filter @assay/server backfill               # index Celo history (resumable)
+pnpm -r --filter "./packages/**" build             # core, SDK and MCP, used by the server and the web app
+cp apps/server/.env.example apps/server/.env      # every value is optional for a read-only node
+pnpm --filter @assay/server backfill               # index Celo history from the SQD portal (resumable)
 pnpm --filter @assay/server start                  # API + indexer on :8787
-NEXT_PUBLIC_ASSAY_API=http://localhost:8787 pnpm --filter @assay/web start
+NEXT_PUBLIC_ASSAY_API=http://localhost:8787 pnpm --filter @assay/web dev
 ```
+
+Paid routes, signed scores and X searches switch on only when their keys are set (`X402_API_KEY` and `PAY_TO`, `ATTESTER_PRIVATE_KEY`, `BUY_PAYER_KEY`); without them the API answers 503 on those routes and everything else works. To use the hosted API instead, point the web app at `https://api.assayscore.xyz`.
 
 ## Check it
 
 ```sh
-pnpm check                     # biome lint, typecheck every package, all TypeScript tests
-cd contracts && forge test     # AssayRegistry, including a signature made by the TypeScript attester
+pnpm check                          # Biome lint, typecheck every package, all TypeScript tests
+cd contracts && forge build && forge test
+                                    # AssayRegistry with solc 0.8.28 (pinned in foundry.toml; Foundry
+                                    # downloads it once), including a signature made by the TypeScript attester
+docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 \
+  detect -s /repo --config /repo/.gitleaks.toml --redact
+                                    # secret scan of the full history; .gitleaks.toml lists the public
+                                    # values (addresses, an event topic) it would otherwise flag
 ```
+
+If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive` before `forge build`. The same three checks run on every push and pull request in `.github/workflows/ci.yml`.
 
 ## Docs
 
