@@ -40,6 +40,11 @@ export interface FundingInfo {
   firstSeenAt: number | null;
   /** The funder is an exchange, bridge, faucet or other high-volume source, so sharing it says nothing. */
   funderIsPublic: boolean;
+  /**
+   * When the first funding came out of a contract (a batch sender, a router) on someone else's
+   * call, that contract; `funder` is then whoever called it. Null or absent for a direct transfer.
+   */
+  fundedVia?: Address | null;
 }
 
 /** Self Agent ID binding for an address. */

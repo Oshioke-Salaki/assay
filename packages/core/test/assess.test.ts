@@ -147,6 +147,32 @@ describe("funding analysis", () => {
     expect(a.flags.find((x) => x.code === "SELLER_FUNDED_PAYERS")?.early).toBeUndefined();
   });
 
+  it("says when funding went through a contract the seller called, and strikes it out the same", () => {
+    const batch = addr("batch-sender");
+    const all = assess(
+      ledger,
+      seller,
+      ctx({ funding: sock.map((s) => [s, { funder: seller, fundedVia: batch }]) }),
+    );
+    const direct = assess(ledger, seller, ctx({ funding: sock.map((s) => [s, { funder: seller }]) }));
+    expect(all.seller.fundedUsd).toBe(direct.seller.fundedUsd);
+    expect(all.score).toBe(direct.score);
+    expect(all.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(
+      /^4 payers, 50% of revenue, were first funded by this address\. All of them were funded through a contract this address called, which counts the same as a direct transfer\. That revenue is not counted\./,
+    );
+    const some = assess(
+      ledger,
+      seller,
+      ctx({
+        funding: sock.map((s, i) => [s, i === 0 ? { funder: seller, fundedVia: batch } : { funder: seller }]),
+      }),
+    );
+    expect(some.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(
+      /first funded by this address\. 1 of them was funded through a contract this address called/,
+    );
+    expect(direct.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).not.toMatch(/contract/);
+  });
+
   it("words the finding for one payer and for many", () => {
     const many = assess(ledger, seller, ctx({ funding: sock.map((s) => [s, { funder: seller }]) }));
     expect(many.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(

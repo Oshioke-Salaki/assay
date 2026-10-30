@@ -5,13 +5,19 @@ import {
   SELF_AGENT_REGISTRY,
   selfAgentRegistryAbi,
 } from "assayscore-core";
-import { type PublicClient, pad } from "viem";
+import { type Hex, type PublicClient, pad } from "viem";
 import type { DB } from "../db.js";
 import type { BlockSource } from "../indexer/sqd.js";
 import { sleep } from "../indexer/sqd.js";
 import { log } from "../lib/log.js";
 import type { Blockscout } from "./blockscout.js";
-import { type FunderClassifier, fundingPass } from "./funding-scan.js";
+import {
+  attributeFunding,
+  type FunderClassifier,
+  type FunderProfile,
+  fundingPass,
+  recheckContractFunding,
+} from "./funding-scan.js";
 
 const DAY = 86_400;
 /** Funding never changes once found; addresses with no funding yet are retried weekly. */
@@ -76,19 +82,39 @@ export class Enricher {
   async fundingBatch(limit = 40, signal?: AbortSignal): Promise<number> {
     const queue = this.fundingQueue(limit);
     const upsert = this.db.prepare(
-      `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error)
-       VALUES (@address, @funder, @fundedAt, @firstSeenAt, @isPublic, @now, @error)
+      `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error, funding_tx, funded_via)
+       VALUES (@address, @funder, @fundedAt, @firstSeenAt, @isPublic, @now, @error, @tx, @via)
        ON CONFLICT (address) DO UPDATE SET funder = excluded.funder, funded_at = excluded.funded_at,
          first_seen_at = excluded.first_seen_at, funder_is_public = excluded.funder_is_public,
-         fetched_at = excluded.fetched_at, error = excluded.error`,
+         fetched_at = excluded.fetched_at, error = excluded.error, funding_tx = excluded.funding_tx,
+         funded_via = excluded.funded_via`,
     );
+    const senderOf = async (hash: Hex): Promise<Address> => (await this.client.getTransaction({ hash })).from;
     let done = 0;
     for (const address of queue) {
       if (signal?.aborted) break;
       try {
         const f = await this.blockscout.funding(address);
-        const isPublic = f.funder ? await this.isPublicFunder(f.funder) : false;
-        upsert.run({ address, ...f, isPublic: isPublic ? 1 : 0, now: nowSec(), error: null });
+        const c = f.funder
+          ? await attributeFunding(
+              address,
+              { funder: f.funder, tx: f.tx },
+              (a) => this.funderProfile(a),
+              senderOf,
+            )
+          : null;
+        upsert.run({
+          address,
+          funder: c?.funder ?? null,
+          fundedAt: f.fundedAt,
+          firstSeenAt: f.firstSeenAt,
+          isPublic: c?.isPublic ? 1 : 0,
+          now: nowSec(),
+          error: null,
+          // Without its transaction, a contract funding is picked up again by the recheck.
+          tx: c?.settled ? f.tx : null,
+          via: c?.via ?? null,
+        });
       } catch (err) {
         upsert.run({
           address,
@@ -98,6 +124,8 @@ export class Enricher {
           isPublic: 0,
           now: nowSec(),
           error: String(err).slice(0, 300),
+          tx: null,
+          via: null,
         });
       }
       done++;
@@ -106,17 +134,18 @@ export class Enricher {
     return done;
   }
 
-  private async isPublicFunder(funder: Address): Promise<boolean> {
+  private async funderProfile(funder: Address): Promise<FunderProfile> {
     // An address that buys or sells over x402 itself is a participant, never a neutral
     // source like an exchange, however many transactions it has.
     const participant = this.db
       .prepare("SELECT 1 FROM pair_days WHERE payer = ? OR payee = ? LIMIT 1")
       .get(funder, funder);
-    if (participant) return false;
+    if (participant) return { isPublic: false, reason: "x402 participant" };
     const cached = this.db
-      .prepare("SELECT is_public, fetched_at FROM funder_profiles WHERE address = ?")
-      .get(funder) as { is_public: number; fetched_at: number } | undefined;
-    if (cached && cached.fetched_at > nowSec() - FUNDER_PROFILE_TTL) return cached.is_public === 1;
+      .prepare("SELECT is_public, reason, fetched_at FROM funder_profiles WHERE address = ?")
+      .get(funder) as { is_public: number; reason: string | null; fetched_at: number } | undefined;
+    if (cached && cached.fetched_at > nowSec() - FUNDER_PROFILE_TTL)
+      return { isPublic: cached.is_public === 1, reason: cached.reason ?? "" };
     const profile = await this.blockscout.funderProfile(funder);
     this.db
       .prepare(
@@ -124,7 +153,7 @@ export class Enricher {
          ON CONFLICT (address) DO UPDATE SET is_public = excluded.is_public, reason = excluded.reason, fetched_at = excluded.fetched_at`,
       )
       .run(funder, profile.isPublic ? 1 : 0, profile.reason, nowSec());
-    return profile.isPublic;
+    return profile;
   }
 
   /** Look up Self Agent IDs for parties with stale or missing entries, in multicall batches. */
@@ -236,9 +265,15 @@ export class Enricher {
     while (!signal.aborted) {
       let done = 0;
       try {
+        const toBlock = await scan.head();
         done = await fundingPass(this.db, scan.source, scan.rpc, {
           batch: scan.batch ?? 500,
-          toBlock: await scan.head(),
+          toBlock,
+          signal,
+        });
+        done += await recheckContractFunding(this.db, scan.source, scan.rpc, {
+          batch: scan.batch ?? 500,
+          toBlock,
           signal,
         });
         if (done > 0) this.markDirty();

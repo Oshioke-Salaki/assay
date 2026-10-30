@@ -354,6 +354,15 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             ) : (
               <span className={styles.dash}>{a.identity.funding ? "never funded" : "not checked yet"}</span>
             )}
+            {a.identity.funding?.fundedVia ? (
+              <span className={styles.muted}>
+                {" "}
+                through contract{" "}
+                <Link className="link" href={`/address/${a.identity.funding.fundedVia}`}>
+                  {short(a.identity.funding.fundedVia)}
+                </Link>
+              </span>
+            ) : null}
             {a.identity.funding?.fundedAt ? (
               <span className={styles.muted}> · {date(a.identity.funding.fundedAt)}</span>
             ) : null}

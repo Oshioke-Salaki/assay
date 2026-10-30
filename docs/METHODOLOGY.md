@@ -1,4 +1,4 @@
-# Methodology (version 2026.10-1)
+# Methodology (version 2026.10-2)
 
 ## What counts as a settlement
 
@@ -15,7 +15,7 @@ For a seller *S*, each payer *P* is classified, first match wins:
 
 | Class | Rule | Counted |
 | --- | --- | --- |
-| seller-funded | *P*'s first funder is *S*, or *P*'s funder's first funder is *S* | nothing |
+| seller-funded | *P*'s first funder is *S*, or *P*'s funder's first funder is *S* (funding through a contract is credited to whoever called it; see below) | nothing |
 | shared-funder | *P*'s first funder is a member of *S*'s loop (however busy it is), or is *S*'s own first funder when that funder is private | nothing |
 | loop | *P* is in *S*'s strongly connected component of the payment graph | net of what *S* paid back into the loop |
 | organic | anything else | in full |
@@ -23,6 +23,8 @@ For a seller *S*, each payer *P* is classified, first match wins:
 **Loops.** Money that can travel from *S* back to *S* through payments forms a strongly connected component (iterative Tarjan, no recursion limit). Within it, only net inflow counts: *offset = min(paid to S by the loop, paid by S to the loop)*, allocated across loop payers in proportion to what each paid. Two businesses that really trade with each other keep the difference; a ring that passes the same dollars round keeps nothing.
 
 **Public funders.** A funder is public when it is a contract or has sent at least 5,000 transactions (the Blockscout fallback also counts a Blockscout tag or 20,000 token transfers), unless it buys or sells over x402 itself. Sharing a public funder (an exchange, a bridge) says nothing about two wallets.
+
+**Funding through a contract.** A contract that hands out tokens (a batch sender, a router, a faucet) did not decide to fund anyone; whoever sent the transaction did. So when a wallet's first funding came out of a public contract, Assay reads that transaction's sender and credits the funding to it, unless the sender is the funded wallet itself (it swapped, bridged or claimed for itself) or is public too (a relayer, bundler or exchange acting for many people). A seller that funds its payers through a batch-send contract is therefore treated exactly as one that sent them money directly, and the finding says the funding went through a contract. Reports show the contract under "First funded by". Since version 2026.10-2.
 
 ## The score
 
@@ -106,6 +108,7 @@ Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback fi
 ## Known limits
 
 - Funding data fills in over time; until a payer is checked it is treated as independent, and each report shows how much of its payer base is checked.
+- Funding through a contract is credited to the transaction's sender. If that sender is itself public (an ERC-4337 bundler relaying for a seller's smart wallet, say), the contract stays a public source. A seller's smart wallet that buys or sells over x402 is never public, so this only matters for a smart wallet that funds payers and never trades itself.
 - A loop that never sends money back to the seller directly, but launders it through a non-x402 transfer, is not seen as a loop; the funding trace catches the common case where the payers were funded from the seller's side.
 - wFIAT history before the first stored rate is priced at the earliest stored rate.
 - X search covers what X's search returns for the address. Posts that write the address differently (shortened, split, in an image) are not found.

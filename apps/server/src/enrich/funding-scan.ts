@@ -19,6 +19,8 @@ export interface FundingFound {
   funder: Address;
   fundedAt: number;
   block: number;
+  /** The transaction that carried the transfer. */
+  tx: Hex;
 }
 
 /**
@@ -71,7 +73,12 @@ export async function scanFirstFunders(
         const to = topicToAddress(l.topics[2]);
         const fromAddr = topicToAddress(l.topics[1]);
         if (!pending.has(to) || fromAddr === to || fromAddr === ZERO) continue;
-        found.set(to, { funder: fromAddr, fundedAt: block.header.timestamp, block: block.header.number });
+        found.set(to, {
+          funder: fromAddr,
+          fundedAt: block.header.timestamp,
+          block: block.header.number,
+          tx: l.transactionHash as Hex,
+        });
         pending.delete(to);
       }
       // Re-issue with the smaller filter once a fifth of it is settled.
@@ -90,13 +97,16 @@ export async function scanFirstFunders(
 export interface FunderClassifier {
   getCode(args: { address: Address }): Promise<Hex | undefined>;
   getTransactionCount(args: { address: Address }): Promise<number>;
+  getTransaction(args: { hash: Hex }): Promise<{ from: Address }>;
 }
 
-export async function classifyFunder(
-  db: DB,
-  rpc: FunderClassifier,
-  funder: Address,
-): Promise<{ isPublic: boolean; reason: string }> {
+export interface FunderProfile {
+  isPublic: boolean;
+  /** Starts with "contract" for a contract; the Blockscout profile may add its name. */
+  reason: string;
+}
+
+export async function classifyFunder(db: DB, rpc: FunderClassifier, funder: Address): Promise<FunderProfile> {
   const participant = db
     .prepare("SELECT 1 FROM pair_days WHERE payer = ? OR payee = ? LIMIT 1")
     .get(funder, funder);
@@ -108,6 +118,80 @@ export async function classifyFunder(
   if (code && code !== "0x") return { isPublic: true, reason: "contract" };
   if (nonce >= 5_000) return { isPublic: true, reason: `${nonce} transactions sent` };
   return { isPublic: false, reason: `${nonce} transactions sent` };
+}
+
+/** Whom a first funding is credited to, and whether sharing that funder says anything. */
+export interface Attribution {
+  funder: Address;
+  isPublic: boolean;
+  /** The contract the funding passed through, when `funder` is whoever called it. */
+  via: Address | null;
+  /** False when the transaction's sender could not be read: the contract stands for now. */
+  settled: boolean;
+}
+
+/**
+ * A contract that hands out tokens (a batch sender, a router, a faucet) is not who decided to fund
+ * a wallet; whoever sent the transaction is. So when the first funding came out of a public
+ * contract, the transaction's sender takes its place, unless the sender is the funded wallet itself
+ * (it swapped or claimed for itself) or is public too (a relayer, bundler or exchange acting for
+ * many people). Without this, a seller could fund its own payers through a batch-send contract and
+ * have them counted as organic.
+ */
+export async function attributeFunding(
+  funded: Address,
+  hit: { funder: Address; tx: Hex | null },
+  profileOf: (a: Address) => Promise<FunderProfile>,
+  senderOf: (tx: Hex) => Promise<Address>,
+): Promise<Attribution> {
+  const profile = await profileOf(hit.funder);
+  const asFound = { funder: hit.funder, isPublic: profile.isPublic, via: null };
+  if (!profile.isPublic || !profile.reason.startsWith("contract")) return { ...asFound, settled: true };
+  if (!hit.tx) return { ...asFound, settled: false };
+  let sender: Address;
+  try {
+    sender = (await senderOf(hit.tx)).toLowerCase() as Address;
+  } catch {
+    return { ...asFound, settled: false };
+  }
+  if (sender === funded || sender === hit.funder) return { ...asFound, settled: true };
+  if ((await profileOf(sender)).isPublic) return { ...asFound, settled: true };
+  return { funder: sender, isPublic: false, via: hit.funder, settled: true };
+}
+
+/** Funder profiles for one pass: cached for a month, otherwise classified and kept for saving. */
+function profiler(db: DB, rpc: FunderClassifier) {
+  const profiles = new Map<Address, FunderProfile>();
+  const cached = db.prepare(
+    "SELECT is_public, reason FROM funder_profiles WHERE address = ? AND fetched_at > ?",
+  );
+  const monthAgo = Math.floor(Date.now() / 1000) - 30 * 86_400;
+  const fresh = new Set<Address>();
+  const profileOf = async (a: Address): Promise<FunderProfile> => {
+    let p = profiles.get(a);
+    if (!p) {
+      const hit = cached.get(a, monthAgo) as { is_public: number; reason: string | null } | undefined;
+      if (hit) p = { isPublic: hit.is_public === 1, reason: hit.reason ?? "" };
+      else {
+        p = await classifyFunder(db, rpc, a);
+        fresh.add(a);
+      }
+      profiles.set(a, p);
+    }
+    return p;
+  };
+  const save = (now: number) => {
+    const upsert = db.prepare(
+      `INSERT INTO funder_profiles (address, is_public, reason, fetched_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (address) DO UPDATE SET is_public = excluded.is_public, reason = excluded.reason, fetched_at = excluded.fetched_at`,
+    );
+    for (const a of fresh) {
+      const p = profiles.get(a)!;
+      upsert.run(a, p.isPublic ? 1 : 0, p.reason, now);
+    }
+  };
+  const senderOf = async (hash: Hex): Promise<Address> => (await rpc.getTransaction({ hash })).from;
+  return { profileOf, senderOf, save, count: () => profiles.size };
 }
 
 /**
@@ -138,53 +222,117 @@ export async function fundingPass(
   const found = await scanFirstFunders(source, addresses, { toBlock: opts.toBlock, signal: opts.signal });
   if (opts.signal?.aborted) return 0;
 
-  const profiles = new Map<Address, { isPublic: boolean; reason: string }>();
-  const cached = db.prepare(
-    "SELECT is_public, reason FROM funder_profiles WHERE address = ? AND fetched_at > ?",
-  );
-  const monthAgo = Math.floor(Date.now() / 1000) - 30 * 86_400;
-  for (const f of new Set([...found.values()].map((v) => v.funder))) {
-    const hit = cached.get(f, monthAgo) as { is_public: number; reason: string } | undefined;
-    profiles.set(
-      f,
-      hit ? { isPublic: hit.is_public === 1, reason: hit.reason } : await classifyFunder(db, rpc, f),
-    );
-  }
+  const p = profiler(db, rpc);
+  const credited = new Map<Address, Attribution>();
+  for (const [a, hit] of found) credited.set(a, await attributeFunding(a, hit, p.profileOf, p.senderOf));
 
   const now = Math.floor(Date.now() / 1000);
   const upsert = db.prepare(
-    `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error)
-     VALUES (?, ?, ?, ?, ?, ?, NULL)
+    `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error, funding_tx, funded_via)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
      ON CONFLICT (address) DO UPDATE SET funder = excluded.funder, funded_at = excluded.funded_at,
        first_seen_at = excluded.first_seen_at, funder_is_public = excluded.funder_is_public,
-       fetched_at = excluded.fetched_at, error = NULL`,
-  );
-  const profile = db.prepare(
-    `INSERT INTO funder_profiles (address, is_public, reason, fetched_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT (address) DO UPDATE SET is_public = excluded.is_public, reason = excluded.reason, fetched_at = excluded.fetched_at`,
+       fetched_at = excluded.fetched_at, error = NULL, funding_tx = excluded.funding_tx,
+       funded_via = excluded.funded_via`,
   );
   db.transaction(() => {
-    for (const [f, p] of profiles) profile.run(f, p.isPublic ? 1 : 0, p.reason, now);
+    p.save(now);
     for (const a of addresses) {
       const hit = found.get(a);
+      const c = credited.get(a);
       // The first inbound funding transfer doubles as "first seen": an unfunded wallet cannot act.
-      if (hit)
+      // A contract funding whose sender could not be read keeps no transaction, so it is retried.
+      if (hit && c)
         upsert.run(
           a,
-          hit.funder,
+          c.funder,
           hit.fundedAt,
           hit.fundedAt,
-          profiles.get(hit.funder)?.isPublic ? 1 : 0,
+          c.isPublic ? 1 : 0,
           now,
+          c.settled ? hit.tx : null,
+          c.via,
         );
-      else upsert.run(a, null, null, null, 0, 0);
+      else upsert.run(a, null, null, null, 0, 0, null, null);
     }
   })();
   log.info("funding pass", {
     addresses: addresses.length,
     funded: found.size,
-    funders: profiles.size,
+    viaContract: [...credited.values()].filter((c) => c.via).length,
+    funders: p.count(),
     ms: Date.now() - t0,
   });
   return addresses.length;
+}
+
+/**
+ * Funding through a contract that was recorded without its transaction (found before funders were
+ * credited past contracts, or whose sender could not be read then): find the transaction again and
+ * credit whoever called the contract. A row is done once it carries its transaction, or "" when the
+ * scan cannot find the transfer at all. Rows that fail go to the back of the queue.
+ */
+export async function recheckContractFunding(
+  db: DB,
+  source: BlockSource,
+  rpc: FunderClassifier,
+  opts: { batch?: number; toBlock: number; signal?: AbortSignal },
+): Promise<number> {
+  const rows = db
+    .prepare(
+      `SELECT f.address, f.funder FROM funding f JOIN funder_profiles p ON p.address = f.funder
+       WHERE f.funding_tx IS NULL AND f.funded_via IS NULL AND f.funder_is_public = 1
+         AND f.error IS NULL AND p.reason LIKE 'contract%'
+       ORDER BY f.fetched_at LIMIT ?`,
+    )
+    .all(opts.batch ?? 500) as { address: Address; funder: Address }[];
+  if (rows.length === 0) return 0;
+  const found = await scanFirstFunders(
+    source,
+    rows.map((r) => r.address),
+    { toBlock: opts.toBlock, signal: opts.signal },
+  );
+  if (opts.signal?.aborted) return 0;
+
+  const p = profiler(db, rpc);
+  const now = Math.floor(Date.now() / 1000);
+  const updates: { address: Address; c: Attribution | null; tx: Hex | null }[] = [];
+  for (const r of rows) {
+    const hit = found.get(r.address);
+    // The scan should find the same first transfer; if it names someone else, leave the row be.
+    if (!hit || hit.funder !== r.funder) updates.push({ address: r.address, c: null, tx: null });
+    else
+      updates.push({
+        address: r.address,
+        c: await attributeFunding(r.address, hit, p.profileOf, p.senderOf),
+        tx: hit.tx,
+      });
+  }
+  const credit = db.prepare(
+    `UPDATE funding SET funder = ?, funder_is_public = ?, funded_via = ?, funding_tx = ?, fetched_at = ?
+     WHERE address = ?`,
+  );
+  const giveUp = db.prepare("UPDATE funding SET funding_tx = '', fetched_at = ? WHERE address = ?");
+  const later = db.prepare("UPDATE funding SET fetched_at = ? WHERE address = ?");
+  // Rows finished this pass: credited, or given up on.
+  let done = 0;
+  db.transaction(() => {
+    p.save(now);
+    for (const u of updates) {
+      if (!u.c) {
+        giveUp.run(now, u.address);
+        done++;
+      } else if (!u.c.settled) later.run(now, u.address);
+      else {
+        credit.run(u.c.funder, u.c.isPublic ? 1 : 0, u.c.via, u.tx, now, u.address);
+        done++;
+      }
+    }
+  })();
+  log.info("contract funding recheck", {
+    rows: rows.length,
+    done,
+    viaContract: updates.filter((u) => u.c?.via).length,
+  });
+  return done;
 }

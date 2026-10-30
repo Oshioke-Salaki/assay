@@ -15,7 +15,7 @@ import type {
   SellerSide,
 } from "./types.js";
 
-export const METHODOLOGY_VERSION = "2026.10-1";
+export const METHODOLOGY_VERSION = "2026.10-2";
 
 const DAY = 86_400;
 
@@ -351,7 +351,18 @@ function sellerFlags(
   const funded = seller.payerLines.filter((l) => l.class === "seller-funded");
   if (funded.length > 0) {
     const usd = sum(funded.map((l) => l.usd));
-    const facts = `${count(funded.length, "payer")}, ${pct(usd / gross)} of revenue, ${funded.length === 1 ? "was" : "were"} first funded by this address. That revenue is not counted.`;
+    // Funding sent through a contract this address called (a batch sender, say) is still its own.
+    const viaContract = funded.filter((l) => {
+      const f = ctx.funding.get(l.payer);
+      return f?.funder === address && f.fundedVia;
+    }).length;
+    const via =
+      viaContract === 0
+        ? ""
+        : viaContract === funded.length
+          ? ` ${funded.length === 1 ? "It was" : "All of them were"} funded through a contract this address called, which counts the same as a direct transfer.`
+          : ` ${viaContract} of them ${viaContract === 1 ? "was" : "were"} funded through a contract this address called, which counts the same as a direct transfer.`;
+    const facts = `${count(funded.length, "payer")}, ${pct(usd / gross)} of revenue, ${funded.length === 1 ? "was" : "were"} first funded by this address.${via} That revenue is not counted.`;
     // A new seller testing with a few wallets it funded is not the same story as a ring: say so,
     // and leave the arithmetic exactly as it is.
     const early =

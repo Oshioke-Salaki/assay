@@ -231,6 +231,12 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (address, code)
   ) WITHOUT ROWID;
   `,
+  // v9: the transaction behind each first funding, and the contract it passed through when the
+  // funder is whoever called that contract.
+  `
+  ALTER TABLE funding ADD COLUMN funding_tx TEXT;
+  ALTER TABLE funding ADD COLUMN funded_via TEXT;
+  `,
 ];
 
 export function openDatabase(path: string): DB {

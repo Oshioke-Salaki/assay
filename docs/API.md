@@ -121,11 +121,13 @@ Delivery: 10-second timeout, redirects not followed, retried after 1, 5, 30, 120
   "buyer": { "spentUsd": 3.1, "loopSpendUsd": 0, "sellers": 2, "counterparties": [] },
   "loop": { "size": 2, "members": ["0x…", "0x…"] },
   "flags": [{ "code": "CIRCULAR_FLOW", "severity": "warning", "title": "Circular revenue", "detail": "…", "usd": 8.4, "addresses": [], "txs": [] }],
-  "identity": { "agentIds": ["1853"], "human": { "agentId": "12", "nullifier": "…", "fresh": true }, "funding": { "funder": "0x…", "fundedAt": 1790000000, "firstSeenAt": 1789000000, "funderIsPublic": true } },
+  "identity": { "agentIds": ["1853"], "human": { "agentId": "12", "nullifier": "…", "fresh": true }, "funding": { "funder": "0x…", "fundedAt": 1790000000, "firstSeenAt": 1789000000, "funderIsPublic": true, "fundedVia": null } },
   "fundingCoverage": 1,
-  "methodologyVersion": "2026.10-1"
+  "methodologyVersion": "2026.10-2"
 }
 ```
+
+`identity.funding.fundedVia` is the contract a wallet's first funding passed through, when `funder` is whoever called that contract (a batch sender, say); null for a direct transfer.
 
 Flag codes: `CIRCULAR_FLOW`, `SELLER_FUNDED_PAYERS`, `SHARED_FUNDER`, `SAME_HUMAN_PAYERS`, `CONCENTRATED_REVENUE`, `SINGLE_PURPOSE_PAYERS`, `DORMANT`, `THIN_FILE`, `HUMAN_BACKED`, `ERC8004_AGENT`, `ESTABLISHED_PAYERS`, `PARTIAL_FUNDING_DATA`.
 

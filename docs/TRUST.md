@@ -7,7 +7,7 @@ What you trust when you use an Assay score, what is enforced onchain, and how to
 | | Where | What it guarantees |
 | --- | --- | --- |
 | The inputs | Celo mainnet | Every x402 settlement, every funding transfer, every ERC-8004 registration and Self proof Assay reads is public and the same for everyone. |
-| The rating | Off-chain, Assay's server | The scoring code (`packages/core/src/assess.ts`, method version 2026.10-1) turns those inputs into a rating. Nothing onchain checks that this computation was done correctly. |
+| The rating | Off-chain, Assay's server | The scoring code (`packages/core/src/assess.ts`, method version 2026.10-2) turns those inputs into a rating. Nothing onchain checks that this computation was done correctly. |
 | The signature | Off-chain, Assay's attester key | A paid check or attest returns an EIP-712 `Score` signed by the attester key. Anyone can recover the signer. |
 | The registry | Celo mainnet, AssayRegistry `0xf6679308af9ff1ffc11a968dfd1ea5882152e29f` | Stores a score only if the current attester signed it, it is well formed, and it has not expired (7 days). Contracts call `scoreOf(subject)` or `isInvestmentGrade(subject)`. |
 | The free report and `withAssayGuard` | Off-chain, over HTTPS | You trust the API's response. Use the paid check when you want a signature you can verify. |
@@ -42,8 +42,8 @@ Outcomes: **verified**; **differs** (the signature is valid, your node computes 
 
 The replay reads your node's database, not Assay's. That database is built from public sources you choose:
 
-- **Settlements**, which decide gross revenue, come from x402 settlement logs on Celo, read through the SQD portal (`SQD_URL`) with an RPC fallback (`RPC_URL`). Point either at your own Celo archive node if you want no third party in the path. Settlements are onchain facts, so every honest index agrees on them, to the micro-dollar.
-- **Enrichment**, which decides what counts as organic, also comes from public data: who first funded each payer (ERC-20 and CELO transfers), Self Agent ID proofs, ERC-8004 registrations. Two honest nodes can differ here if one traced an address before or after the other, or before a registration appeared. When gross revenue matches and organic does not, that is the reason, and `verify` says so.
+- **Settlements**, which decide gross revenue, come from x402 settlement logs on Celo. They are event logs, so a full node that serves `eth_getLogs` is enough; no archive state is read. A full backfill streams them from the SQD portal (`SQD_URL`); your RPC (`RPC_URL`) fills short gaps. Settlements are onchain facts, so every honest index agrees on them, to the micro-dollar.
+- **Enrichment**, which decides what counts as organic, also comes from public data: who first funded each payer (ERC-20 and CELO transfers, and the sender of the funding transaction when it came out of a contract), Self Agent ID proofs, ERC-8004 registrations. Two honest nodes can differ here if one traced an address before or after the other, or before a registration appeared. When gross revenue matches and organic does not, that is the reason, and `verify` says so.
 
 The replay rebuilds the ledger from raw settlements at exactly `asOfBlock`, so revenue that arrived after the score was signed never leaks in, and uses `issuedAt` as "now" so the dormancy rule sees the same day Assay saw. Scores signed before 30 Oct 2026 recorded the indexer's latest block rather than the analysis snapshot's, and may differ by settlements from the last few seconds; scores signed since replay exactly.
 
@@ -55,6 +55,18 @@ The replay rebuilds the ledger from raw settlements at exactly `asOfBlock`, so r
 - **Assay rates itself by the same rules,** publicly, at assayscore.xyz/stats. On 30 Oct 2026 it rated itself D, because its first paid checks came from a wallet it funded.
 - **Evidence is attached.** Every finding links the transactions behind it.
 - **Sellers can answer.** The right of reply puts a seller's own words under any finding, without changing the score.
+
+## If Assay gets it wrong
+
+A score sits in a payment path, so a mistake cuts both ways: an honest seller blocked, or a bad one paid. What limits the damage:
+
+- **The guard is cautious by default.** `withAssayGuard` stops a payment only on a `block` verdict, which needs most of a seller's revenue to be self-funded or circular. New sellers with no rating go through (`allowUnrated` defaults to true), and if Assay cannot be reached the payment goes through (`onAssayError` defaults to `"allow"`). A buyer who wants stricter checks sets `minRating` or `onAssayError: "block"` and owns that choice.
+- **Every finding shows its evidence.** Each one names the payers and links the transactions, so a wrong call is visible on Celoscan, not hidden in a number.
+- **Sellers can answer.** A seller signs a reply from its own wallet and it appears under the finding, on the page and in the API, for every buyer to read. A reply never changes the score, so it cannot be used to talk a rating up.
+- **Anyone can recheck.** `verify` replays any signed score from public data, so a score that does not follow from the chain can be shown not to.
+- **Fixes are in the open.** A rule that misjudges a case is fixed in the code, with a test for the case, and the method version changes. There are no one-off overrides for a single address.
+
+Report a wrong rating as a GitHub issue (github.com/Oshioke-Salaki/assay/issues) with the address and what you think is wrong. The most recent rule change closed a gap the other way: funding sent through a batch-send contract is now credited to whoever called the contract (method 2026.10-2), so a seller cannot route its payers' funding through one to make them look independent.
 
 ## What is still trusted
 

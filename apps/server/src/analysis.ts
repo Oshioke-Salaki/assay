@@ -402,7 +402,7 @@ export function loadContext(db: DB, now = Math.floor(Date.now() / 1000)): Assess
   const funding = new Map<Address, FundingInfo>();
   for (const r of db
     .prepare(
-      "SELECT address, funder, funded_at, first_seen_at, funder_is_public FROM funding WHERE error IS NULL",
+      "SELECT address, funder, funded_at, first_seen_at, funder_is_public, funded_via FROM funding WHERE error IS NULL",
     )
     .iterate() as IterableIterator<{
     address: Address;
@@ -410,12 +410,14 @@ export function loadContext(db: DB, now = Math.floor(Date.now() / 1000)): Assess
     funded_at: number | null;
     first_seen_at: number | null;
     funder_is_public: number;
+    funded_via: Address | null;
   }>) {
     funding.set(r.address, {
       funder: r.funder,
       fundedAt: r.funded_at,
       firstSeenAt: r.first_seen_at,
       funderIsPublic: r.funder_is_public === 1,
+      fundedVia: r.funded_via,
     });
   }
   const humans = new Map<Address, HumanInfo>();

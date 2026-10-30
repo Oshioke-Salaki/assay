@@ -1,4 +1,5 @@
 import { type Address, TOKENS } from "assayscore-core";
+import type { Hex } from "viem";
 import { fetchJson, HttpError } from "../lib/http.js";
 
 /** Tokens whose arrival counts as "funding". Arbitrary airdropped tokens do not. */
@@ -11,6 +12,7 @@ const FUNDING_TOKENS = new Set<string>([
 ]);
 
 interface TxListItem {
+  hash?: string;
   from: string;
   to: string;
   value: string;
@@ -32,6 +34,8 @@ export interface FundingResult {
   funder: Address | null;
   fundedAt: number | null;
   firstSeenAt: number | null;
+  /** The transaction that carried the first funding. */
+  tx: Hex | null;
 }
 
 export interface FunderProfile {
@@ -86,10 +90,10 @@ export class Blockscout {
         offset: "100",
       }),
     ]);
-    const candidates: { from: string; ts: number }[] = [];
+    const candidates: { from: string; ts: number; tx: string | null }[] = [];
     for (const t of txs) {
       if (t.to?.toLowerCase() === address && t.isError !== "1" && t.value !== "0" && t.from) {
-        candidates.push({ from: t.from.toLowerCase(), ts: Number(t.timeStamp) });
+        candidates.push({ from: t.from.toLowerCase(), ts: Number(t.timeStamp), tx: t.hash ?? null });
       }
     }
     for (const t of tokenTxs) {
@@ -99,7 +103,7 @@ export class Blockscout {
         FUNDING_TOKENS.has(t.contractAddress?.toLowerCase()) &&
         t.from
       ) {
-        candidates.push({ from: t.from.toLowerCase(), ts: Number(t.timeStamp) });
+        candidates.push({ from: t.from.toLowerCase(), ts: Number(t.timeStamp), tx: t.hash ?? null });
       }
     }
     const firsts = [txs[0], tokenTxs[0]]
@@ -114,6 +118,7 @@ export class Blockscout {
       funder: (first?.from as Address | undefined) ?? null,
       fundedAt: first?.ts ?? null,
       firstSeenAt: firsts.length ? Math.min(...firsts) : null,
+      tx: first?.tx && /^0x[0-9a-fA-F]{64}$/.test(first.tx) ? (first.tx.toLowerCase() as Hex) : null,
     };
   }
 

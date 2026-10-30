@@ -257,7 +257,19 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             Settlements, which decide gross revenue, are onchain facts every node agrees on. Funding, Self and
             ERC-8004 enrichment decide what counts as organic; the replay says when a difference comes from
             there. There are no manual overrides, paying never changes a rating, and Assay rates itself by the
-            same rules on <Link href="/stats">/stats</Link>. The full model is in{" "}
+            same rules on <Link href="/stats">/stats</Link>.
+          </p>
+          <p>
+            <strong>If Assay gets it wrong.</strong> A score sits in a payment path, so a mistake cuts both
+            ways. The guard stops a payment only on a <code>block</code> verdict, lets unrated sellers through
+            and lets payments through if Assay is unreachable, unless the buyer asks for stricter. Every
+            finding links its transactions, sellers can answer any finding in their own words, and a rule that
+            misjudges a case is fixed in the open, with a test and a new method version, never with a one-off
+            override. Report a wrong rating as a{" "}
+            <a className="link" href="https://github.com/Oshioke-Salaki/assay/issues">
+              GitHub issue
+            </a>
+            . The full model is in{" "}
             <a className="link" href="https://github.com/Oshioke-Salaki/assay/blob/main/docs/TRUST.md">
               TRUST.md
             </a>
@@ -286,7 +298,8 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             </li>
             <li>
               <strong>The seller paid for it.</strong> A payer first funded by the seller, or by a wallet the
-              seller funded, counts for nothing.
+              seller funded, counts for nothing. Funding sent through a contract (a batch sender, say) is
+              credited to whoever called the contract, so routing it through one changes nothing.
             </li>
             <li>
               <strong>It shares the seller&rsquo;s purse.</strong> A payer funded by the seller&rsquo;s own
