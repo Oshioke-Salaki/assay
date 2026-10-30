@@ -268,8 +268,8 @@ export default async function AddressPage({ params }: { params: Promise<{ addres
             {evidence.map((f) => (
               <li key={f.code} className={styles.flag}>
                 <span>
-                  <span className={`${styles.pill} ${SEVERITY_PILL[f.severity]}`}>
-                    {SEVERITY_WORD[f.severity]}
+                  <span className={`${styles.pill} ${f.early ? styles.pillWarn : SEVERITY_PILL[f.severity]}`}>
+                    {f.early ? "Early" : SEVERITY_WORD[f.severity]}
                   </span>
                 </span>
                 <span className={styles.flagTitle}>{f.title}</span>

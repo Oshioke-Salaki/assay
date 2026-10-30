@@ -11,7 +11,8 @@ import {
   type PairFlow,
   summarizeEconomy,
 } from "assayscore-core";
-import type { DB } from "./db.js";
+import { type DB, getCursor } from "./db.js";
+import { SETTLEMENT_CURSOR } from "./indexer/settlements.js";
 import { log } from "./lib/log.js";
 
 export interface DailyPoint {
@@ -23,6 +24,8 @@ export interface DailyPoint {
 
 export interface Snapshot {
   builtAt: number;
+  /** Last block of settlements the snapshot was built from: what a signed score is "as of". */
+  block: number;
   ledger: Ledger;
   ctx: AssessmentContext;
   summary: EconomySummary;
@@ -108,10 +111,25 @@ export class Analysis {
     return assess(s.ledger, address, s.ctx);
   }
 
+  /**
+   * An assessment with the block and time it was computed at, from one snapshot. Signed scores use
+   * these as asOfBlock and issuedAt, so anyone can replay them (see verify.ts).
+   */
+  scored(address: Address): { assessment: Assessment; block: number; now: number } {
+    const s = this.current();
+    return { assessment: assess(s.ledger, address, s.ctx), block: s.block, now: s.ctx.now };
+  }
+
   private build(): Snapshot {
     const started = Date.now();
-    const ledger = new Ledger(loadFlows(this.db));
-    const ctx = loadContext(this.db);
+    // One read transaction, so the cursor, the flows and the context are the same moment of the
+    // database even while the indexer writes; that is what lets a signed score be replayed.
+    const { block, flows, ctx } = this.db.transaction(() => ({
+      block: getCursor(this.db, SETTLEMENT_CURSOR) ?? 0,
+      flows: loadFlows(this.db),
+      ctx: loadContext(this.db),
+    }))();
+    const ledger = new Ledger(flows);
     const summary = summarizeEconomy(ledger, ctx);
     const organicShare = new Map<Address, number>();
     for (const s of summary.sellersRanked) {
@@ -124,7 +142,7 @@ export class Analysis {
       sellers: summary.sellers,
       settlements: summary.settlements,
     });
-    return { builtAt: Date.now(), ledger, ctx, summary, daily, organicShare, reviews };
+    return { builtAt: Date.now(), block, ledger, ctx, summary, daily, organicShare, reviews };
   }
 
   agentsFor(address: Address): AgentRow[] {
@@ -324,12 +342,63 @@ function loadFlows(db: DB): PairFlow[] {
   return flows;
 }
 
+/**
+ * The same flows as loadFlows, rebuilt from raw settlements up to and including `block`: every
+ * settlement adds to exactly one pair_days row, so grouping settlements by payer, payee and UTC
+ * day gives the pair_days a database indexed only to that block would hold.
+ */
+export function loadFlowsAt(db: DB, block: number): PairFlow[] {
+  const rows = db
+    .prepare(
+      `SELECT payer, payee, ts / 86400 AS day, COUNT(*) AS count, SUM(usd) AS usd, MIN(ts) AS first_ts, MAX(ts) AS last_ts,
+              (SELECT s2.tx_hash FROM settlements s2 WHERE s2.payer = s.payer AND s2.payee = s.payee AND s2.ts / 86400 = s.ts / 86400 AND s2.block <= @block
+               ORDER BY s2.ts DESC, s2.block DESC, s2.log_index DESC LIMIT 1) AS last_tx
+       FROM settlements s WHERE block <= @block
+       GROUP BY payer, payee, ts / 86400 ORDER BY payer, payee, day`,
+    )
+    .iterate({ block }) as IterableIterator<{
+    payer: Address;
+    payee: Address;
+    day: number;
+    count: number;
+    usd: number;
+    first_ts: number;
+    last_ts: number;
+    last_tx: Hash;
+  }>;
+  const flows: PairFlow[] = [];
+  let cur: PairFlow | null = null;
+  for (const r of rows) {
+    if (!cur || cur.payer !== r.payer || cur.payee !== r.payee) {
+      if (cur) flows.push(finishFlow(cur));
+      cur = {
+        payer: r.payer,
+        payee: r.payee,
+        count: 0,
+        usd: 0,
+        firstTs: r.first_ts,
+        lastTs: r.last_ts,
+        days: [],
+        sampleTxs: [],
+      };
+    }
+    cur.count += r.count;
+    cur.usd += r.usd;
+    cur.firstTs = Math.min(cur.firstTs, r.first_ts);
+    cur.lastTs = Math.max(cur.lastTs, r.last_ts);
+    cur.days.push(r.day);
+    cur.sampleTxs.push(r.last_tx);
+  }
+  if (cur) flows.push(finishFlow(cur));
+  return flows;
+}
+
 function finishFlow(f: PairFlow): PairFlow {
   // Rows arrive oldest day first; keep the newest few transactions as evidence.
   return { ...f, sampleTxs: f.sampleTxs.slice(-5).reverse() };
 }
 
-function loadContext(db: DB): AssessmentContext {
+export function loadContext(db: DB, now = Math.floor(Date.now() / 1000)): AssessmentContext {
   const funding = new Map<Address, FundingInfo>();
   for (const r of db
     .prepare(
@@ -383,7 +452,7 @@ function loadContext(db: DB): AssessmentContext {
     add(r.owner, r.agent_id);
     add(r.wallet, r.agent_id);
   }
-  return { funding, humans, agentIds, now: Math.floor(Date.now() / 1000) };
+  return { funding, humans, agentIds, now };
 }
 
 function loadDaily(db: DB, share: Map<Address, number>): DailyPoint[] {

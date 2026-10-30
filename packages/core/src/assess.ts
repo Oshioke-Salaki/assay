@@ -19,6 +19,9 @@ export const METHODOLOGY_VERSION = "2026.10-1";
 
 const DAY = 86_400;
 
+/** "Early" self-funding: a seller under this age, with at most this much self-funded revenue. */
+export const EARLY_SELF_FUNDED = { maxAgeDays: 60, maxUsd: 50 } as const;
+
 /** Below these an address is "thin file": numbers are shown, no rating is issued. */
 export const THIN_FILE = { minSettlements: 5, minPayers: 2, minGrossUsd: 0.05 } as const;
 
@@ -348,14 +351,24 @@ function sellerFlags(
   const funded = seller.payerLines.filter((l) => l.class === "seller-funded");
   if (funded.length > 0) {
     const usd = sum(funded.map((l) => l.usd));
+    const facts = `${count(funded.length, "payer")}, ${pct(usd / gross)} of revenue, ${funded.length === 1 ? "was" : "were"} first funded by this address. That revenue is not counted.`;
+    // A new seller testing with a few wallets it funded is not the same story as a ring: say so,
+    // and leave the arithmetic exactly as it is.
+    const early =
+      seller.firstTs !== null &&
+      ctx.now - seller.firstTs <= EARLY_SELF_FUNDED.maxAgeDays * DAY &&
+      usd <= EARLY_SELF_FUNDED.maxUsd;
     flags.push({
       code: "SELLER_FUNDED_PAYERS",
       severity: usd / gross >= 0.2 ? "critical" : "warning",
-      title: "Pays itself through wallets it funded",
-      detail: `${count(funded.length, "payer")}, ${pct(usd / gross)} of revenue, ${funded.length === 1 ? "was" : "were"} first funded by this address. That revenue is not counted.`,
+      title: early ? "Early payments from wallets it funded" : "Pays itself through wallets it funded",
+      detail: early
+        ? `${facts} New sellers often test with wallets they fund themselves; this weighs less as independent customers arrive, and the seller can explain it in a reply.`
+        : facts,
       usd,
       addresses: funded.map((l) => l.payer).slice(0, 10),
       txs: takeTxs(funded),
+      ...(early ? { early: true } : {}),
     });
   }
   const shared = seller.payerLines.filter((l) => l.class === "shared-funder");

@@ -64,6 +64,12 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 
 `GET /v1/admin` with `Authorization: Bearer <ADMIN_KEY>` returns the agent wallet's and PayTo's balances (CELO, USDC, USD₮, USA₮), today's spend against each daily cap, the X queue, the last 20 paid calls including failures, the last 50 warnings and errors since restart, and the database and process. It answers 404 when `ADMIN_KEY` is not set, 401 for a missing or wrong key, and 429 for 15 minutes after five wrong keys from one IP. It is never cached, and every URL in the log lines it returns is cut to its origin so an RPC key in a path never reaches the browser. The page at [assayscore.xyz/admin](https://assayscore.xyz/admin) asks for the key, keeps it in that tab's session storage only, and refreshes every 30 seconds.
 
+## Verifying a signed score
+
+`attestation.message.asOfBlock` is the last block of settlements the score was computed from, and `issuedAt` the time it was computed. Both come from the same analysis snapshot, so the score can be replayed: `pnpm --filter @assay/server verify <file>` (or `--onchain 0xSubject`) checks the signature against AssayRegistry's attester and recomputes the score from your own node at that block and time. See [TRUST.md](TRUST.md).
+
+Findings carry `early: true` on `SELLER_FUNDED_PAYERS` when the seller is under 60 days old and its self-funded revenue is $50 or less; the severity and verdict are unchanged.
+
 ## Alerts (webhooks)
 
 A watch delivers a JSON POST for `watch.started` (right away, so the receiver can confirm the pipe), `rating.changed`, `verdict.changed`, `finding.critical` (a new critical finding code) and `x.warnings` (posts with warning words appeared on X). The body is `{ id, event, watch, address, at, detail, previous, current, report, api }`, where `previous` and `current` are `{ rating, score, verdict, critical[], xWarnings }`. Headers: `x-assay-event`, `x-assay-delivery`, `x-assay-watch`, `x-assay-timestamp`, and `x-assay-signature: sha256=<hex HMAC-SHA256 over "<timestamp>.<body>" with the watch secret>`. Verify the signature and ignore anything older than a few minutes.

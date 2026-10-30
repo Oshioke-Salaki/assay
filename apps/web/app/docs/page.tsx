@@ -22,6 +22,7 @@ const SECTIONS = [
   ["reply", "Right of reply"],
   ["payer", "Check a payer"],
   ["independent", "Independent payers"],
+  ["trust", "Trust model"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
   ["selfhost", "Run your own"],
@@ -235,6 +236,32 @@ function payOut(address seller) external {
             agent before writing it, and <strong>never paid it</strong> otherwise. Reviews written from an
             agent&rsquo;s page here store their file inline as a <code>data:</code> URI with{" "}
             <code>proofOfPayment</code>, so anyone can check them without Assay.
+          </p>
+        </Panel>
+
+        <Panel title="Trust model" id="trust">
+          <p>
+            The rating is computed off-chain, from public Celo data, by open code. What is onchain is the
+            check that a score was signed by Assay&rsquo;s attester, is fresh and is about that address:
+            AssayRegistry verifies the EIP-712 signature, and contracts call{" "}
+            <code>isInvestmentGrade(subject)</code>. The chain proves who issued a score and when, not that it
+            is right. What makes it checkable: every signed score records the block and time it was computed
+            from, and anyone can replay it from their own node.
+          </p>
+          <Code label="Verify a signed score from your own node">{`
+pnpm --filter @assay/server verify check.json          # the JSON a paid check returned
+pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegistry
+# VERIFIED: the signature is Assay's and your node computes the same score.
+          `}</Code>
+          <p>
+            Settlements, which decide gross revenue, are onchain facts every node agrees on. Funding, Self and
+            ERC-8004 enrichment decide what counts as organic; the replay says when a difference comes from
+            there. There are no manual overrides, paying never changes a rating, and Assay rates itself by the
+            same rules on <Link href="/stats">/stats</Link>. The full model is in{" "}
+            <a className="link" href="https://github.com/Oshioke-Salaki/assay/blob/main/docs/TRUST.md">
+              TRUST.md
+            </a>
+            .
           </p>
         </Panel>
 

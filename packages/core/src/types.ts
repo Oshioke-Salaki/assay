@@ -89,6 +89,11 @@ export interface Flag {
   /** Addresses and transactions a reader can check on an explorer. */
   addresses?: Address[];
   txs?: Hash[];
+  /**
+   * A new seller with a small amount of self-funded revenue: usually its own test payments.
+   * Changes only the wording and how the finding is shown; the money is struck out all the same.
+   */
+  early?: boolean;
 }
 
 export type PayerClass = "organic" | "loop" | "seller-funded" | "shared-funder";

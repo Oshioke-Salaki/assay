@@ -81,3 +81,7 @@ Four pieces of motion, each performing the data rather than decorating it, all w
 ## Payer checks
 
 `packages/core/src/payer.ts` turns a payer's assessment (buyer side, funding, identity) and, when a seller is named, that seller's payer line for it, into a four-way verdict with plain reasons. Served free at `GET /v1/payer/:address?seller=`, shown as "Check a payer" on every report with revenue, and exposed through the SDK (`payer`) and MCP (`assay_check_payer`).
+
+## Replayable scores
+
+`Analysis.build` reads the settlement cursor, the flows and the enrichment context inside one read transaction, so a snapshot is one moment of the database; signed scores use that snapshot's block as `asOfBlock` and its time as `issuedAt` (`Analysis.scored`). `apps/server/src/verify.ts` replays a score: `loadFlowsAt` rebuilds the ledger from raw `settlements` up to `asOfBlock` (each settlement adds to exactly one `pair_days` row, so this equals the pair_days a node indexed only to that block would hold), `loadContext` takes `issuedAt` as now, and the five fields are compared, allowing one micro-dollar for float summation order. `src/scripts/verify.ts` is the CLI. See TRUST.md.

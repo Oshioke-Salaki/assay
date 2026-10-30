@@ -79,6 +79,10 @@ Each address is searched again weekly. A failed search is retried after a day.
 
 **Not scored, on purpose.** Anyone can post "0x… is a scam" about a competitor, and a victim's plea or a bot's bait names an address next to the same words. A score that a post can move is worth nothing. So posts never change a rating, a score, a verdict or a signed attestation. They add one plain sentence to the check's reasons and are listed with links, so a person or an agent can read them before paying. The wording says what the posts contain ("name this address next to words like scam or hack"), not what the seller did.
 
+## Early self-funded payments
+
+A seller's own test payments are struck out like any other self-funded revenue: if the founder sent a wallet ten dollars and that wallet paid it back, the business earned nothing. Friends and family paying from their own money are not self-funded and count in full. When a seller is younger than 60 days and its self-funded revenue is $50 or less, the finding is worded as "Early payments from wallets it funded" and shown as early rather than critical, with a note that new sellers often test this way. The arithmetic, the score and the verdict are unchanged; only the words and the way it is shown differ.
+
 ## Payer checks, for sellers
 
 The mirror of the pre-payment check. A payer is **blocked** when most of its spending goes round a payment loop, or, for the seller asking, when the seller funded it or shares a loop with it; **caution** when part of its spending is circular, it was first funded by a seller it pays, or it shares the seller's private funder; **established** when it has been on Celo for thirty days and pays several sellers, has ten or more payments, or carries a fresh Self proof; otherwise **new**. Nothing here is a score; it is the record, in words a seller can act on before a refund, an allowance or credit.

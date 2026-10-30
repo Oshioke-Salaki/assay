@@ -551,8 +551,8 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get("/v1/check/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
-    const a = analysis.assess(address);
-    const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
+    const { assessment: a, block, now } = analysis.scored(address);
+    const attestation = deps.attester ? await deps.attester.sign(a, block, now) : null;
     const x = readXMentions(deps.db, address);
     askX(x, address, a.seller.grossUsd, true);
     return c.json({
@@ -617,8 +617,8 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get("/v1/attest/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
-    const a = analysis.assess(address);
-    const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
+    const { assessment: a, block, now } = analysis.scored(address);
+    const attestation = deps.attester ? await deps.attester.sign(a, block, now) : null;
     const x = readXMentions(deps.db, address);
     askX(x, address, a.seller.grossUsd, true);
     return c.json({
@@ -834,8 +834,8 @@ export async function checkWithX(
         message: `The X search did not answer (${got.x.error ?? "unknown error"}). Nothing was charged.`,
       },
     };
-  const a = deps.analysis.assess(address);
-  const attestation = deps.attester ? await deps.attester.sign(a, deps.status().settlementsBlock) : null;
+  const { assessment: a, block, now } = deps.analysis.scored(address);
+  const attestation = deps.attester ? await deps.attester.sign(a, block, now) : null;
   return {
     status: 200,
     body: {

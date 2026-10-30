@@ -12,7 +12,8 @@
     "backfill": "tsx src/scripts/backfill.ts",
     "inspect": "tsx src/scripts/inspect.ts",
     "ops": "tsx src/scripts/ops.ts",
-    "fixture:attestation": "tsx src/scripts/attestation-fixture.ts"
+    "fixture:attestation": "tsx src/scripts/attestation-fixture.ts",
+    "verify": "tsx src/scripts/verify.ts"
   },
   "dependencies": {
     "assayscore-core": "workspace:*",

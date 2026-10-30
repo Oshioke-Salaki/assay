@@ -19,6 +19,10 @@
 
 Sellers claim their page (name, what they sell, category, website, X), get a badge, read a plan that says exactly what would raise their rating, from the real formula, answer any finding in their own words, get free alerts on their own address, and check a payer (established customer or sock) before a refund, an allowance or credit. The sellers directory at `/sellers` and the MCP tool `assay_find_sellers` send buyers' agents to reliable sellers, which is why a seller would promote its Assay page.
 
+## Checkable, not just trusted
+
+Signed scores record the block and time they were computed from; `pnpm --filter @assay/server verify` replays any of them from a node anyone can run, and checks the signature against AssayRegistry's attester. [TRUST.md](TRUST.md) states what is onchain, what is not, and what is still trusted.
+
 ## Built for the organisers too
 
 `GET /v1/independent/:address` applies the hackathon's own independent-user rule to any PayTo address, free, with reasons per payer and volume in the window. Any team can check its numbers before the deadline, and the same query could score the whole event.

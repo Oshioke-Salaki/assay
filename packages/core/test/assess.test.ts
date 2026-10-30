@@ -99,6 +99,54 @@ describe("funding analysis", () => {
     expect(flag?.addresses).toHaveLength(4);
   });
 
+  it("calls a new seller's small self-funded payments early, and changes nothing else", () => {
+    const young = addr("young");
+    const test = addr("test-wallet");
+    const real = addr("real-buyer");
+    const ledger = new Ledger([
+      flow(test, young, 3, { count: 3, days: lastDays(5) }),
+      flow(real, young, 1, { count: 2, days: lastDays(5) }),
+    ]);
+    const a = assess(ledger, young, ctx({ funding: [[test, { funder: young }]] }));
+    const f = a.flags.find((x) => x.code === "SELLER_FUNDED_PAYERS");
+    expect(f).toMatchObject({
+      early: true,
+      severity: "critical",
+      title: "Early payments from wallets it funded",
+    });
+    expect(f?.detail).toMatch(/New sellers often test with wallets they fund themselves/);
+    // The money is struck out exactly as before.
+    expect(a.seller.fundedUsd).toBe(3);
+    expect(a.seller.organicUsd).toBe(1);
+
+    // Large self-funding is not "early", however young the seller.
+    const big = assess(
+      new Ledger([
+        flow(test, young, 400, { count: 3, days: lastDays(5) }),
+        flow(real, young, 1, { count: 2, days: lastDays(5) }),
+      ]),
+      young,
+      ctx({ funding: [[test, { funder: young }]] }),
+    );
+    const bf = big.flags.find((x) => x.code === "SELLER_FUNDED_PAYERS");
+    expect(bf?.early).toBeUndefined();
+    expect(bf?.title).toBe("Pays itself through wallets it funded");
+  });
+
+  it("does not call an old seller's self-funding early", () => {
+    const old = addr("old-seller");
+    const test = addr("old-test");
+    const a = assess(
+      new Ledger([
+        flow(test, old, 3, { count: 3, days: lastDays(200).slice(0, 3) }),
+        flow(addr("b"), old, 1, { count: 2, days: lastDays(200).slice(0, 2) }),
+      ]),
+      old,
+      ctx({ funding: [[test, { funder: old }]] }),
+    );
+    expect(a.flags.find((x) => x.code === "SELLER_FUNDED_PAYERS")?.early).toBeUndefined();
+  });
+
   it("words the finding for one payer and for many", () => {
     const many = assess(ledger, seller, ctx({ funding: sock.map((s) => [s, { funder: seller }]) }));
     expect(many.flags.find((f) => f.code === "SELLER_FUNDED_PAYERS")?.detail).toMatch(

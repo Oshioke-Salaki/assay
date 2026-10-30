@@ -191,7 +191,8 @@ async function publish(subjectArg: string | undefined) {
   const rt = createRuntime(env);
   if (!rt.attester || !env.REGISTRY_ADDRESS) throw new Error("Set ATTESTER_PRIVATE_KEY and REGISTRY_ADDRESS");
   const subject = normalizeAddress(subjectArg);
-  const signed = await rt.attester.sign(rt.analysis.assess(subject), rt.status().settlementsBlock);
+  const { assessment, block, now } = rt.analysis.scored(subject);
+  const signed = await rt.attester.sign(assessment, block, now);
   rt.close();
   const m = signed.message;
   const score = {
