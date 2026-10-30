@@ -67,6 +67,8 @@ export interface AgentRow {
   reviews: number;
   paidReviews: number;
   revenueUsd: number;
+  /** Contracts the agent also receives at: listed in its registration file and owned by its owner or agentWallet. */
+  linked: Address[];
 }
 
 /**
@@ -147,7 +149,10 @@ export class Analysis {
 
   agentsFor(address: Address): AgentRow[] {
     const rows = this.db
-      .prepare(`${AGENT_SELECT} WHERE a.owner = @a OR a.wallet = @a ORDER BY CAST(a.agent_id AS INTEGER)`)
+      .prepare(`${AGENT_SELECT} WHERE a.owner = @a OR a.wallet = @a
+          OR a.agent_id IN (SELECT l.agent_id FROM agent_links l JOIN agents x ON x.agent_id = l.agent_id
+                            WHERE l.address = @a AND l.contract_owner IN (x.owner, x.wallet))
+          ORDER BY CAST(a.agent_id AS INTEGER)`)
       .all({ a: address }) as RawAgent[];
     return rows.map(toAgentRow);
   }
@@ -185,13 +190,17 @@ export class Analysis {
       const id = q.replace(/^#/, "");
       rows = rows.filter(
         (r) =>
-          r.agentId === id || r.owner === q || r.wallet === q || (r.name?.toLowerCase().includes(q) ?? false),
+          r.agentId === id ||
+          r.owner === q ||
+          r.wallet === q ||
+          r.linked.includes(q as Address) ||
+          (r.name?.toLowerCase().includes(q) ?? false),
       );
     }
     return { total: rows.length, rows: rows.slice(opts.offset, opts.offset + opts.limit) };
   }
 
-  /** Settlements a client made to an agent's owner or wallet, newest first: the proofs it can review with. */
+  /** Settlements a client made to an agent's owner, wallet or linked contracts, newest first: the proofs it can review with. */
   payments(
     agentId: string,
     client: Address,
@@ -200,7 +209,7 @@ export class Analysis {
     return this.db
       .prepare(
         `SELECT s.tx_hash AS txHash, s.ts, s.token, s.usd, s.payee FROM settlements s JOIN agents a ON a.agent_id = ?
-         WHERE s.payer = ? AND s.payee IN (a.owner, COALESCE(a.wallet, a.owner))
+         WHERE s.payer = ? AND (s.payee IN (a.owner, COALESCE(a.wallet, a.owner)) OR s.payee IN ${LINKED})
          ORDER BY s.ts DESC LIMIT ?`,
       )
       .all(agentId, client, limit) as {
@@ -217,9 +226,12 @@ export class Analysis {
       .prepare(
         `SELECT f.*, a.owner, a.wallet,
            (SELECT COALESCE(SUM(p.usd), 0) FROM pair_days p
-             WHERE p.payer = f.client AND p.payee IN (a.owner, COALESCE(a.wallet, a.owner)) AND p.first_ts <= f.ts) AS paid_usd,
+             WHERE p.payer = f.client AND p.payee IN (a.owner, COALESCE(a.wallet, a.owner)) AND p.first_ts <= f.ts) +
+           (SELECT COALESCE(SUM(p.usd), 0) FROM pair_days p
+             WHERE p.payer = f.client AND p.payee IN ${LINKED} AND p.first_ts <= f.ts) AS paid_usd,
            (SELECT COUNT(*) FROM settlements s
-             WHERE s.tx_hash = f.proof_tx AND s.payer = f.client AND s.payee IN (a.owner, COALESCE(a.wallet, a.owner))) AS proven
+             WHERE s.tx_hash = f.proof_tx AND s.payer = f.client
+               AND (s.payee IN (a.owner, COALESCE(a.wallet, a.owner)) OR s.payee IN ${LINKED})) AS proven
          FROM feedback f JOIN agents a ON a.agent_id = f.agent_id
          WHERE f.agent_id = ? ORDER BY f.block DESC, f.idx DESC LIMIT ?`,
       )
@@ -254,6 +266,7 @@ interface RawAgent {
   image: string | null;
   x402: number | null;
   registeredTs: number;
+  linkedJson: string;
   reviews: number;
   paidReviews: number;
   revenueUsd: number;
@@ -278,19 +291,30 @@ interface RawFeedback {
   proven: number;
 }
 
+/**
+ * Contracts agent `a` receives at besides its owner and agentWallet: listed in its registration
+ * file and owned by its owner or agentWallet.
+ */
+const LINKED = `(SELECT l.address FROM agent_links l
+  WHERE l.agent_id = a.agent_id AND l.contract_owner IN (a.owner, a.wallet)
+    AND l.address NOT IN (a.owner, COALESCE(a.wallet, a.owner)))`;
+
 const AGENT_SELECT = `
   SELECT a.agent_id AS agentId, a.owner, a.wallet, a.uri, a.name, a.description, a.image, a.x402,
     a.registered_ts AS registeredTs,
+    (SELECT json_group_array(address) FROM ${LINKED}) AS linkedJson,
     (SELECT COUNT(*) FROM feedback f WHERE f.agent_id = a.agent_id AND f.revoked = 0) AS reviews,
-    (SELECT COUNT(*) FROM feedback f WHERE f.agent_id = a.agent_id AND f.revoked = 0 AND EXISTS (
+    (SELECT COUNT(*) FROM feedback f WHERE f.agent_id = a.agent_id AND f.revoked = 0 AND (EXISTS (
        SELECT 1 FROM pair_days p WHERE p.payer = f.client AND p.payee IN (a.owner, COALESCE(a.wallet, a.owner))
-         AND p.first_ts <= f.ts)) AS paidReviews,
+         AND p.first_ts <= f.ts) OR EXISTS (
+       SELECT 1 FROM pair_days p WHERE p.payer = f.client AND p.payee IN ${LINKED} AND p.first_ts <= f.ts))) AS paidReviews,
     (SELECT COALESCE(SUM(p.usd), 0) FROM pair_days p
-       WHERE p.payee = a.owner OR (a.wallet IS NOT NULL AND a.wallet <> a.owner AND p.payee = a.wallet)) AS revenueUsd
+       WHERE p.payee = a.owner OR (a.wallet IS NOT NULL AND a.wallet <> a.owner AND p.payee = a.wallet)) +
+    (SELECT COALESCE(SUM(p.usd), 0) FROM pair_days p WHERE p.payee IN ${LINKED}) AS revenueUsd
   FROM agents a`;
 
-function toAgentRow(r: RawAgent): AgentRow {
-  return { ...r, x402: r.x402 === null ? null : r.x402 === 1 };
+function toAgentRow({ linkedJson, ...r }: RawAgent): AgentRow {
+  return { ...r, x402: r.x402 === null ? null : r.x402 === 1, linked: JSON.parse(linkedJson) as Address[] };
 }
 
 /** ERC-8004 values are fixed point: value / 10^decimals. Decimals are capped at 18 by the registry. */
@@ -453,6 +477,14 @@ export function loadContext(db: DB, now = Math.floor(Date.now() / 1000)): Assess
   }>) {
     add(r.owner, r.agent_id);
     add(r.wallet, r.agent_id);
+  }
+  for (const r of db
+    .prepare(
+      `SELECT l.agent_id, l.address FROM agent_links l JOIN agents a ON a.agent_id = l.agent_id
+       WHERE l.contract_owner IN (a.owner, a.wallet)`,
+    )
+    .iterate() as IterableIterator<{ agent_id: string; address: Address }>) {
+    add(r.address, r.agent_id);
   }
   return { funding, humans, agentIds, now };
 }

@@ -15,7 +15,7 @@ import type {
   SellerSide,
 } from "./types.js";
 
-export const METHODOLOGY_VERSION = "2026.10-2";
+export const METHODOLOGY_VERSION = "2026.10-3";
 
 const DAY = 86_400;
 

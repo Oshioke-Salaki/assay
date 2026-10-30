@@ -48,8 +48,8 @@ Bad addresses answer 400 before any payment is asked for. With no `X402_API_KEY`
 | `GET /v1/payer/:address?seller=0x…` | a payer check, for sellers: `verdict` (established · new · caution · block), `reasons` in plain words, age on Celo, funder and whether it is public, spending breadth, loop share, identity, and with `seller` how it stands to that seller (`withSeller.class`: organic, seller-funded, shared-funder, loop or none) |
 | `GET /v1/address/:address/plan` | what would raise the rating: `next` (rating, floor, points away), `thin` (what a thin file still needs), `customers` (typical customer size, how many reach the next rating, score by count), `levers` (customers, time, activity, identity, each with the score after), `struckOut`, `keep` (what would lower it). Every number comes from the real score formula |
 | `GET /v1/agents?q=&limit=30&offset=0&paid=1` | ERC-8004 agents ranked by reviews from paying wallets, then revenue |
-| `GET /v1/agents/:id` | `agent`, `assessment` of its wallet, `check`, `reviews` with tiers, `x` for its wallet |
-| `GET /v1/agents/:id/payments/:client` | a client's settlements to the agent, and whether the client owns it |
+| `GET /v1/agents/:id` | `agent` (with `linked`: contracts it is also paid at, listed in its registration file and owned by its owner or wallet), `address` the report is for (its wallet, or its busiest linked contract when the wallet was never paid), `assessment` of that address, `check`, `reviews` with tiers, `x` for that address |
+| `GET /v1/agents/:id/payments/:client` | a client's settlements to the agent (its owner, wallet or a linked contract), and whether the client owns it |
 | `GET /v1/proof/:tx` | a live check of one transaction: `{ ok, status, settlements }` |
 | `GET /v1/status` | indexed blocks, lag, relayers, paid services used, attester, registry |
 | `GET /v1/paid-calls` | every call Assay paid another service for, with its settlement transaction. Reconciled against the chain every five minutes, so a payment whose answer was lost still appears |
@@ -123,7 +123,7 @@ Delivery: 10-second timeout, redirects not followed, retried after 1, 5, 30, 120
   "flags": [{ "code": "CIRCULAR_FLOW", "severity": "warning", "title": "Circular revenue", "detail": "…", "usd": 8.4, "addresses": [], "txs": [] }],
   "identity": { "agentIds": ["1853"], "human": { "agentId": "12", "nullifier": "…", "fresh": true }, "funding": { "funder": "0x…", "fundedAt": 1790000000, "firstSeenAt": 1789000000, "funderIsPublic": true, "fundedVia": null } },
   "fundingCoverage": 1,
-  "methodologyVersion": "2026.10-2"
+  "methodologyVersion": "2026.10-3"
 }
 ```
 

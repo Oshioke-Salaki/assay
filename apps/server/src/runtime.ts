@@ -81,7 +81,7 @@ export function createRuntime(env: Env): Runtime {
     // Full-history funding scans need the portal itself; the RPC failover only serves the tail.
     { source: rawSqd, rpc, head: async () => (await rawSqd.finalizedHead()).number },
   );
-  const cards = new AgentCards(db, env.IPFS_GATEWAY, invalidate);
+  const cards = new AgentCards(db, env.IPFS_GATEWAY, invalidate, rpc);
   const attester =
     env.ATTESTER_PRIVATE_KEY && env.REGISTRY_ADDRESS
       ? new Attester(env.ATTESTER_PRIVATE_KEY, env.REGISTRY_ADDRESS)

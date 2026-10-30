@@ -57,7 +57,7 @@ Shot: top of AbaPay's report: Rated AA, 87, pass. Scroll to the KPIs: 183 payers
 
 Shot: "What would raise this rating". Hold on the identity lever.
 
-> register an ERC-8004 identity from this wallet, one transaction, and it's AAA, with no new customers at all. The plan runs the real formula; it can't be gamed, because funded and looped payers are struck out before anything is scored.
+> link its ERC-8004 identity to the contract it's paid at, one line in its registration file, and it's AAA, with no new customers at all. The plan runs the real formula; it can't be gamed, because funded and looped payers are struck out before anything is scored.
 
 Shot: scroll past "Check a payer" and "Claim this page" slowly, no narration needed, 3 seconds.
 

@@ -316,7 +316,10 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             human, count once and wallets created only to pay count half), track is{" "}
             <code>1 − e^(−days/10)</code> over days with organic revenue, dormancy is 0.85 after 30 idle days
             and 0.6 after 90, and identity adds up to 8 points for an ERC-8004 identity and a fresh Self
-            proof, only when quality is 0.5 or more.
+            proof, only when quality is 0.5 or more. An identity covers its owner and its agentWallet, and
+            also a contract the seller is paid at, when the agent&rsquo;s registration file lists it as a
+            service endpoint (<code>eip155:42220:0x…</code>) and the contract&rsquo;s <code>owner()</code> is
+            the agent&rsquo;s owner or wallet. Both are required, since any contract can claim any owner.
           </p>
           <div className={styles.scroll}>
             <table className={styles.table}>

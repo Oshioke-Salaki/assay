@@ -194,7 +194,7 @@ export function ratingPlan(a: Assessment): RatingPlan {
       lever(
         "identity",
         "Register an ERC-8004 identity from this wallet",
-        "Worth 3 points on a record that is at least half organic.",
+        "Worth 3 points on a record that is at least half organic. If this address is a contract, list it in your agent's registration file instead (a service whose endpoint is eip155:42220:<this address>); it counts when the contract's owner() is the agent's owner or wallet.",
         scoreFrom({ ...base, identityBonus: c.identityBonus + 3 }),
       );
     if (!human)

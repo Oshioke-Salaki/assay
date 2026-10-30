@@ -34,13 +34,14 @@ if (passes > 0) {
   const enricher = new Enricher(rt.db, new Blockscout(env.BLOCKSCOUT_URL, env.BLOCKSCOUT_RPS), rt.rpc, () =>
     rt.analysis.invalidate(),
   );
-  const cards = new AgentCards(rt.db, env.IPFS_GATEWAY, () => rt.analysis.invalidate());
+  const cards = new AgentCards(rt.db, env.IPFS_GATEWAY, () => rt.analysis.invalidate(), rt.rpc);
   for (let i = 0; i < passes && !controller.signal.aborted; i++) {
     const humans = await enricher.humansBatch(1_000);
     const funded = await enricher.fundingBatch(Number(process.env.FUNDING_BATCH ?? "60"), controller.signal);
     const agentCards = await cards.batch(50);
+    const links = await cards.linkPass(200);
     console.log(
-      `enrichment pass ${i + 1}: ${humans} self lookups, ${funded} funding lookups, ${agentCards} agent cards`,
+      `enrichment pass ${i + 1}: ${humans} self lookups, ${funded} funding lookups, ${agentCards} agent cards, ${links} owner checks`,
     );
   }
 }

@@ -237,6 +237,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE funding ADD COLUMN funding_tx TEXT;
   ALTER TABLE funding ADD COLUMN funded_via TEXT;
   `,
+  // v10: Celo addresses an agent's registration file lists, with the owner() each one reports.
+  // A listed contract counts as the agent's when its owner is the agent's owner or agentWallet.
+  `
+  CREATE TABLE agent_links (
+    agent_id       TEXT NOT NULL,
+    address        TEXT NOT NULL,
+    contract_owner TEXT,
+    checked_at     INTEGER,
+    PRIMARY KEY (agent_id, address)
+  ) WITHOUT ROWID;
+  CREATE INDEX agent_links_address ON agent_links (address);
+  `,
 ];
 
 export function openDatabase(path: string): DB {

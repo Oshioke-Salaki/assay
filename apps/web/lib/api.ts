@@ -103,6 +103,8 @@ export interface AgentRow {
   reviews: number;
   paidReviews: number;
   revenueUsd: number;
+  /** Contracts the agent is also paid at: listed in its registration file and owned by its owner or wallet. */
+  linked?: Address[];
 }
 
 export interface ReviewRow {
@@ -175,6 +177,8 @@ export interface AddressResponse {
 
 export interface AgentResponse {
   agent: AgentRow;
+  /** The address the report is for: the agent's wallet, or its busiest linked contract when the wallet was never paid. */
+  address?: Address;
   assessment: TrimmedAssessment;
   check: CheckResult;
   reviews: ReviewRow[];

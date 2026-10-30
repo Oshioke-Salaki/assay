@@ -506,12 +506,20 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: "bad_agent_id", message: "Agent ids are integers." }, 400);
     const agent = analysis.agent(id);
     if (!agent) return c.json({ error: "not_found", message: `No ERC-8004 agent #${id} on Celo.` }, 404);
-    const wallet = (agent.wallet ?? agent.owner) as Address;
-    const a = analysis.assess(wallet);
+    // The report is for the address the agent is paid at: its wallet, or, when that has never been
+    // paid, the linked contract with the most revenue.
+    let wallet = (agent.wallet ?? agent.owner) as Address;
+    let a = analysis.assess(wallet);
+    if (a.seller.grossUsd === 0)
+      for (const l of agent.linked) {
+        const b = analysis.assess(l);
+        if (b.seller.grossUsd > a.seller.grossUsd) [wallet, a] = [l, b];
+      }
     const x = readXMentions(deps.db, wallet);
     askX(x, wallet, a.seller.grossUsd, false);
     return c.json({
       agent,
+      address: wallet,
       assessment: trimAssessment(a),
       check: withX(verdictFor(a), x),
       reviews: analysis.reviews(id),
@@ -529,7 +537,7 @@ export function createApp(deps: AppDeps): Hono {
     if (!agent) return c.json({ error: "not_found", message: `No ERC-8004 agent #${id} on Celo.` }, 404);
     const c2 = normalizeAddress(client);
     return c.json({
-      agent: { agentId: agent.agentId, owner: agent.owner, wallet: agent.wallet },
+      agent: { agentId: agent.agentId, owner: agent.owner, wallet: agent.wallet, linked: agent.linked },
       isOwner: c2 === agent.owner || c2 === agent.wallet,
       payments: analysis.payments(id, c2),
     });

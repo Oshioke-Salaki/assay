@@ -24,7 +24,7 @@ interface Payment {
 interface PaymentsResponse {
   isOwner: boolean;
   payments: Payment[];
-  agent: { owner: `0x${string}`; wallet: `0x${string}` | null };
+  agent: { owner: `0x${string}`; wallet: `0x${string}` | null; linked?: `0x${string}`[] };
 }
 
 interface ProofResponse {
@@ -107,7 +107,7 @@ function Inner({ agentId }: { agentId: string }) {
             : "That transaction is not an x402 payment.",
       );
     }
-    const agentAddrs = [loaded?.agent.owner, loaded?.agent.wallet]
+    const agentAddrs = [loaded?.agent.owner, loaded?.agent.wallet, ...(loaded?.agent.linked ?? [])]
       .filter(Boolean)
       .map((x) => x!.toLowerCase());
     const match = p.settlements.find((s) => s.payer === w.address && agentAddrs.includes(s.payee));

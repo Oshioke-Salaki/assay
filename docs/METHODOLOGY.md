@@ -1,4 +1,4 @@
-# Methodology (version 2026.10-2)
+# Methodology (version 2026.10-3)
 
 ## What counts as a settlement
 
@@ -38,9 +38,11 @@ score = 100 × quality^1.5 × (0.55 × diversity + 0.45 × track) × dormancy + 
 | diversity | 1 − e^(−payers/6), where *payers* is the inverse Herfindahl index of organic revenue over payer groups. Payers with one private funder, or one Self human (same nullifier), form one group. Wallets first seen less than a day before paying, that never paid anyone else, weigh half. |
 | track | 1 − e^(−days/10) over distinct UTC days with organic revenue |
 | dormancy | 1, then 0.85 after 30 idle days, 0.6 after 90 |
-| identity | +3 for an ERC-8004 identity, +5 for a fresh Self proof (+2 if expired), only when quality ≥ 0.5 |
+| identity | +3 for an ERC-8004 identity (see below for contracts), +5 for a fresh Self proof (+2 if expired), only when quality ≥ 0.5 |
 
 The result is clamped to 0–100 and rounded.
+
+**Which addresses an ERC-8004 identity covers.** A registration counts for its owner and for its verified `agentWallet`. Many sellers are paid at a contract instead (a payment splitter or a custom receiver), and a contract that cannot sign (no ERC-1271) cannot be set as `agentWallet`. Such a contract counts too when two things agree: the agent's registration file lists it as a service endpoint in CAIP-10 form (`{"name": "agentWallet", "endpoint": "eip155:42220:0x…"}`), and the contract's `owner()` is the agent's owner or `agentWallet`. Both are needed. Any contract can return any address from `owner()`, so that alone would let a stranger borrow a reputable agent's identity; the registration file can only be changed by the agent's owner, so listing the contract there is the owner's own claim. Assay reads `owner()` again daily, and https registration files daily too, since they can change without an onchain event. A payment to a linked contract also counts as paying the agent, for revenue on the agents page and for review tiers. Since version 2026.10-3.
 
 | Rating | AAA | AA | A | BBB | BB | B | CCC | D |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -103,10 +105,11 @@ The Agents on Open Rails hackathon defines an independent user as a wallet that 
 
 ## Reviews
 
-Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback file names a settlement Assay finds onchain from the reviewer to the agent's owner or wallet; **paid customer** when the reviewer paid the agent before writing it; **never paid it** otherwise.
+Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback file names a settlement Assay finds onchain from the reviewer to the agent's owner, wallet or a linked contract; **paid customer** when the reviewer paid the agent before writing it; **never paid it** otherwise.
 
 ## Known limits
 
+- A contract that has no `owner()` function (a multisig, a contract with role-based access) cannot be linked to an agent this way yet. Setting it as `agentWallet`, where it supports ERC-1271, still works.
 - Funding data fills in over time; until a payer is checked it is treated as independent, and each report shows how much of its payer base is checked.
 - Funding through a contract is credited to the transaction's sender. If that sender is itself public (an ERC-4337 bundler relaying for a seller's smart wallet, say), the contract stays a public source. A seller's smart wallet that buys or sells over x402 is never public, so this only matters for a smart wallet that funds payers and never trades itself.
 - A loop that never sends money back to the seller directly, but launders it through a non-x402 transfer, is not seen as a loop; the funding trace catches the common case where the payers were funded from the seller's side.

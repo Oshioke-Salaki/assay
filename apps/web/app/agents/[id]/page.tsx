@@ -52,7 +52,8 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const avg = (rs: typeof live) => (rs.length ? rs.reduce((n, r) => n + r.value, 0) / rs.length : null);
   const paidAvg = avg(paid);
   const allAvg = avg(live);
-  const wallet = agent.wallet ?? agent.owner;
+  const wallet = d.address ?? agent.wallet ?? agent.owner;
+  const linked = agent.linked ?? [];
 
   return (
     <AppShell current="/agents">
@@ -113,6 +114,23 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
           </dd>
           <dt>Wallet</dt>
           <dd>{agent.wallet ? short(agent.wallet) : <span className={styles.dash}>owner</span>}</dd>
+          {linked.length > 0 && (
+            <>
+              <dt title="Listed in the agent's registration file, and owned by its owner or wallet">
+                Paid at
+              </dt>
+              <dd>
+                {linked.map((l, i) => (
+                  <span key={l}>
+                    {i > 0 && ", "}
+                    <Link className="link" href={`/address/${l}`}>
+                      {short(l)}
+                    </Link>
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
           <dt>Registered</dt>
           <dd>{date(agent.registeredTs)}</dd>
           <dt>x402</dt>
