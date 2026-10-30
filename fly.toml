@@ -1,10 +1,10 @@
-# Assay API on Fly.io: the same image Railway runs, one machine with the SQLite file on a volume.
-#   fly deploy --image ghcr.io/oshioke-salaki/assay-api:<sha>
+# Assay API on Fly.io: one machine with the SQLite file on a volume.
+#   fly deploy --remote-only     # builds this checkout's Dockerfile on Fly's builder
 app = "assayscore-api"
 primary_region = "iad" # next to Vercel's default functions region
 
 [build]
-  image = "ghcr.io/oshioke-salaki/assay-api:latest"
+  dockerfile = "Dockerfile"
 
 [env]
   NODE_ENV = "production"
