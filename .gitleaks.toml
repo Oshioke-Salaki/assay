@@ -1,0 +1,25 @@
+# Secret scanning for this repository: gitleaks' default rules, plus an allowlist for the public
+# values its generic-api-key rule mistakes for keys. Each entry says what the value is. Nothing
+# here hides a secret: real keys live only in untracked files (apps/server/.env, .admin-key,
+# apps/server/.chainstack) and in Fly secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public onchain values and placeholders, not secrets"
+regexes = [
+  # The EIP-3009 AuthorizationUsed event topic (keccak of its signature), public, in scripts/rpc-bench.mjs.
+  # Only this exact value: a private key is also 0x plus 64 hex characters, so 32-byte values in
+  # general must stay scanned.
+  '''0x98de503528ee59b575ef0c0a2576a82497bfc029a5685b209e9ec333479b10a5''',
+  # 20-byte contract and wallet addresses (tokens, registries, facilitators) in code and tests.
+  '''0x[0-9a-fA-F]{40}\b''',
+]
+# Example env files hold empty placeholders only; the generic rule reads across a blank value
+# into the next variable's name.
+paths = ['''(^|/)\.env\.example$''']
+# Lines that name a key without containing one: header names and env lookups.
+stopwords = [
+  "env.X402_API_KEY",
+  "process.env",
+]

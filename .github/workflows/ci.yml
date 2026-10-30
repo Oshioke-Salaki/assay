@@ -1,0 +1,62 @@
+name: CI
+
+# On every push and pull request, in a clean runner: lint, typecheck and every TypeScript test;
+# the Solidity build and tests with the pinned compiler; and a secret scan of the full history.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The packages are consumed as built workspaces by the server, web, SDK and MCP.
+      - run: pnpm -r --filter "./packages/**" build
+      - run: pnpm check
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.3.2
+      - run: forge --version
+      # solc 0.8.28 is pinned in foundry.toml and downloaded here on first use.
+      - run: forge build --sizes
+      - run: forge test -vv
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 \
+            detect -s /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
