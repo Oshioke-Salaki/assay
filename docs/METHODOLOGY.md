@@ -99,7 +99,7 @@ A wallet's owner can sign a short response to any finding on its report. It appe
 
 ## What would raise a rating
 
-Every report with revenue carries a plan, computed by running the score formula above on a changed input: how many more independent customers (each paying what a typical current customer pays) reach the next rating floor; what 10 or 30 more active days add; what one organic payment does to a dormant record; what an ERC-8004 registration or a Self proof is worth, and only when the record is at least half organic. New customers are added to the inverse-Herfindahl exactly, from the current totals. The plan also states what is struck out and how much organic revenue it would take to outweigh it, and, for high ratings, what would lower them. It cannot be gamed: funded and looped payers are struck out before scoring, so the only lever that moves a rating is real revenue from wallets the seller does not control.
+Every report with revenue carries a plan, computed by running the score formula above on a changed input: how many more independent customers (each paying what a typical current customer pays) reach the next rating floor; what 10 or 30 more active days add; what one organic payment does to a dormant record; what an ERC-8004 registration or a Self proof is worth, and only when the record is at least half organic. New customers are added to the inverse-Herfindahl exactly, from the current totals. The plan also states what is struck out and how much organic revenue it would take to outweigh it, and, for high ratings, what would lower them. Funded and looped payers are struck out before scoring, so the plan never suggests a way up that the funding trace would catch.
 
 ## Independent payers, by the hackathon's rule
 
@@ -120,6 +120,12 @@ Savant.Chat audited the funding trace and the scoring code on 30 Oct 2026 and fo
 - **The single-purpose discount cancelled out.** The plain inverse Herfindahl is scale-free, so halving every payer's dollars changed nothing when all of a seller's payers were disposable, and a disposable wallet that outspent a real customer raised diversity. The index above fixes both. Sellers whose revenue comes mostly from wallets created just before paying them rate lower than before.
 
 ## Known limits
+
+What a seller could still do that Assay would not see, stated so nobody has to find it:
+
+- **Sock wallets funded from a public source.** A payer whose first funding came from an exchange withdrawal, a bridge or a faucet looks like any customer. Each such wallet costs a withdrawal and its fees, and a fresh one that pays only this seller counts half; Self proofs close the rest, since many wallets behind one human count once.
+- **Only the first funding is traced.** A wallet that first receives a little from a public source, and is then funded by the seller, is credited to the public source. The fix is to trace who funded most of a wallet's money before its first payment; it is the next change planned for the funding trace.
+- **The single-purpose discount is a soft signal.** It applies to wallets first seen less than a day before paying that never paid anyone else. Waiting a day, or paying a second seller once, avoids it. It lowers the score of a cheap sock farm; it does not by itself catch one.
 
 - A contract that has no `owner()` function (a multisig, a contract with role-based access) cannot be linked to an agent this way yet. Setting it as `agentWallet`, where it supports ERC-1271, still works.
 - Funding data fills in over time; until a payer is checked it is treated as independent, and each report shows how much of its payer base is checked.

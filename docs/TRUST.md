@@ -66,7 +66,21 @@ A score sits in a payment path, so a mistake cuts both ways: an honest seller bl
 - **Anyone can recheck.** `verify` replays any signed score from public data, so a score that does not follow from the chain can be shown not to.
 - **Fixes are in the open.** A rule that misjudges a case is fixed in the code, with a test for the case, and the method version changes. There are no one-off overrides for a single address.
 
-Report a wrong rating as a GitHub issue (github.com/Oshioke-Salaki/assay/issues) with the address and what you think is wrong. The latest change (2026.10-4) fixed five defects an outside audit found in the funding trace and the score, each reproduced with a failing test first; METHODOLOGY.md lists them. One lowered real ratings: wallets created just before paying a seller now count half, as the method always said, where before the formula cancelled the discount out. An earlier change closed a gap the other way: funding sent through a batch-send contract is now credited to whoever called the contract (method 2026.10-2), so a seller cannot route its payers' funding through one to make them look independent. The change after it (2026.10-3) went the other way: a seller paid at a contract it owns can now carry its ERC-8004 identity there, by listing the contract in its registration file, after a seller pointed out that a contract that cannot sign could never be set as its `agentWallet`.
+Report a wrong rating as a GitHub issue (github.com/Oshioke-Salaki/assay/issues) with the address and what you think is wrong.
+
+Recent rule changes, each with tests and a new method version:
+
+- **2026.10-4 (31 Oct).** Five defects found by an outside audit, fixed and the data they wrote repaired (below). One lowered real ratings: wallets created just before paying a seller now count half, as the method always said; before, the formula cancelled the discount out.
+- **2026.10-3 (30 Oct).** A seller paid at a contract it owns can carry its ERC-8004 identity there, by listing the contract in its registration file. A seller pointed out that a contract that cannot sign could never be its `agentWallet`.
+- **2026.10-2 (30 Oct).** Funding sent through a batch-send contract is credited to whoever called the contract, so a seller cannot route its payers' funding through one to make them look independent.
+
+## Outside review
+
+Savant.Chat audited the funding trace (`apps/server/src/enrich/funding-scan.ts`) and the scoring code (`packages/core/src/assess.ts`) on 30 Oct 2026. It reported five findings, two high and three medium, each with a proof of concept. All five were confirmed by reproducing them as failing tests in this repository (`test/audit.test.ts` in `packages/core` and `apps/server`) and fixed in method 2026.10-4. The fixes also repair what the defects had already written: migration v11 re-queues the affected funding rows, and a one-off rescan replaces any first funding that was a zero-value transfer. METHODOLOGY.md lists each finding and its fix.
+
+Reviewing the same patterns elsewhere turned up three more places where a failed lookup could be read as an answer: the `owner()` read that links a contract to an agent, the Self Agent ID lookup, and the payment proof behind a review. None could be triggered by an attacker; each could have cost an honest seller. All three now retry instead.
+
+What Assay still cannot see is listed under "Known limits" in METHODOLOGY.md, so nobody has to discover it.
 
 ## What is still trusted
 

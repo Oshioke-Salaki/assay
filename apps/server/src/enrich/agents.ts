@@ -1,5 +1,5 @@
 import type { Address } from "assayscore-core";
-import { parseAbi } from "viem";
+import { BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError, parseAbi } from "viem";
 import type { DB } from "../db.js";
 import { sleep } from "../indexer/sqd.js";
 import { fetchUntrusted } from "../lib/http.js";
@@ -89,16 +89,28 @@ function listedAddresses(json: Record<string, unknown>): Address[] {
   return out;
 }
 
-/** owner() of a contract, lowercased; null for an EOA, a contract without owner(), or the zero address. */
+/**
+ * owner() of a contract, lowercased; null for an EOA, a contract without owner(), or the zero
+ * address. A failed RPC call throws: it says nothing about the owner, so it must not unlink a seller.
+ */
 export async function readOwner(rpc: OwnerReader, address: Address): Promise<Address | null> {
+  let raw: string;
   try {
-    const o = String(
-      await rpc.readContract({ address, abi: OWNER_ABI, functionName: "owner" }),
-    ).toLowerCase();
-    return /^0x[0-9a-f]{40}$/.test(o) && !/^0x0{40}$/.test(o) ? (o as Address) : null;
-  } catch {
-    return null;
+    raw = String(await rpc.readContract({ address, abi: OWNER_ABI, functionName: "owner" }));
+  } catch (err) {
+    if (isNoAnswer(err)) return null;
+    throw err;
   }
+  const o = raw.toLowerCase();
+  return /^0x[0-9a-f]{40}$/.test(o) && !/^0x0{40}$/.test(o) ? (o as Address) : null;
+}
+
+/** The call reached the chain and there is no owner() to give: it reverted or returned nothing. */
+function isNoAnswer(err: unknown): boolean {
+  if (!(err instanceof BaseError)) return false;
+  return Boolean(
+    err.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError),
+  );
 }
 
 function clean(s: string): string {
@@ -191,9 +203,18 @@ export class AgentCards {
     const update = this.db.prepare(
       "UPDATE agent_links SET contract_owner = ?, checked_at = ? WHERE agent_id = ? AND address = ?",
     );
+    const retry = this.db.prepare("UPDATE agent_links SET checked_at = ? WHERE agent_id = ? AND address = ?");
     let changed = false;
     for (const r of rows) {
-      const owner = await readOwner(rpc, r.address);
+      let owner: Address | null;
+      try {
+        owner = await readOwner(rpc, r.address);
+      } catch (err) {
+        // Keep the last reading and look again in an hour.
+        log.warn("owner() lookup failed", { address: r.address, error: String(err).slice(0, 200) });
+        retry.run(now - LINK_TTL + 3_600, r.agent_id, r.address);
+        continue;
+      }
       if (owner !== r.contract_owner) changed = true;
       update.run(owner, now, r.agent_id, r.address);
     }

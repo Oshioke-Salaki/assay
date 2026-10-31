@@ -1,5 +1,10 @@
 import type { Settlement } from "assayscore-core";
-import type { Hash, PublicClient } from "viem";
+import {
+  type Hash,
+  type PublicClient,
+  TransactionNotFoundError,
+  TransactionReceiptNotFoundError,
+} from "viem";
 import type { FxRates } from "./enrich/fx.js";
 import { extractSettlements } from "./indexer/extract.js";
 
@@ -12,9 +17,11 @@ export type ProofResult =
  * finalized index. Used by the review flow so a buyer can review seconds after paying.
  */
 export async function proveSettlement(client: PublicClient, fx: FxRates, hash: Hash): Promise<ProofResult> {
+  // Only "no such transaction" is an answer; an RPC failure throws, so the caller says "try again"
+  // instead of telling a buyer their payment does not exist.
   const [tx, receipt] = await Promise.all([
-    client.getTransaction({ hash }).catch(() => null),
-    client.getTransactionReceipt({ hash }).catch(() => null),
+    client.getTransaction({ hash }).catch(notFound(TransactionNotFoundError)),
+    client.getTransactionReceipt({ hash }).catch(notFound(TransactionReceiptNotFoundError)),
   ]);
   if (!tx) return { ok: false, status: "not_found", settlements: [] };
   if (!receipt) return { ok: false, status: "pending", settlements: [] };
@@ -45,4 +52,11 @@ export async function proveSettlement(client: PublicClient, fx: FxRates, hash: H
   );
   if (settlements.length === 0) return { ok: false, status: "not_a_settlement", settlements: [] };
   return { ok: true, status: "settled", settlements };
+}
+
+function notFound(kind: new (...args: never[]) => Error) {
+  return (err: unknown): null => {
+    if (err instanceof kind) return null;
+    throw err;
+  };
 }

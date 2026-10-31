@@ -79,6 +79,26 @@
   padding-left: 1.2em;
 }
 
+.faq {
+  display: grid;
+  gap: 6px;
+  max-width: 76ch;
+  margin: 0;
+}
+
+.faq dt {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.faq dt:not(:first-child) {
+  margin-top: 12px;
+}
+
+.faq dd {
+  margin: 0;
+}
+
 @media (max-width: 860px) {
   .toc {
     grid-column: 1 / -1;

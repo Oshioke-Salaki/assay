@@ -8,7 +8,7 @@ Tabs:
 1. https://assayscore.xyz
 2. https://assayscore.xyz/economy
 3. https://assayscore.xyz/address/0x53aa8c3ed977f5540b070703785726e5fcadc461 (the ring)
-4. https://assayscore.xyz/address/0x5df8ae2b963165b735b18ca86b1ea448d2aa032c (AbaPay, rated AA)
+4. https://assayscore.xyz/address/0x5df8ae2b963165b735b18ca86b1ea448d2aa032c (AbaPay, rated A)
 5. https://assayscore.xyz/sellers
 6. A terminal with `npx -y assayscore-mcp` ready, or Claude Code with the MCP added
 7. https://assayscore.xyz/stats
@@ -51,13 +51,13 @@ Shot: scroll to Findings; hover the first finding's transaction links.
 
 > And here is a real one. AbaPay pays utility bills for people in Nigeria, in stablecoins.
 
-Shot: top of AbaPay's report: Rated AA, 87, pass. Scroll to the KPIs: 183 payers, all organic.
+Shot: top of AbaPay's report: Rated A, 74, pass. Scroll to the KPIs: 183 payers, all organic, and the single-purpose finding.
 
-> Rated AA. A hundred and eighty-three payers, all independent. No seller on Celo is rated AAA yet, and Assay tells this one exactly what would make it the first:
+> Rated A. A hundred and eighty-three payers, none of them funded by AbaPay. Many are wallets made just before their first bill, and Assay counts those half, so the rating says exactly how much of this is proven repeat demand.
 
-Shot: "What would raise this rating". Hold on the identity lever.
+Shot: "What would raise this rating". Hold on the customers lever.
 
-> link its ERC-8004 identity to the contract it's paid at, one line in its registration file, and it's AAA, with no new customers at all. The plan runs the real formula; it can't be gamed, because funded and looped payers are struck out before anything is scored.
+> And it says what would raise it: more independent customers, more active days, an identity linked to the contract it's paid at. Every number comes from the real formula, and payers the seller funded are struck out before anything is scored.
 
 Shot: scroll past "Check a payer" and "Claim this page" slowly, no narration needed, 3 seconds.
 

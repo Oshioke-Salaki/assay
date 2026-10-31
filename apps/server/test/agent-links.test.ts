@@ -1,4 +1,5 @@
 import type { Address } from "assayscore-core";
+import { ContractFunctionZeroDataError } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Analysis, loadContext } from "../src/analysis.js";
 import type { DB } from "../src/db.js";
@@ -28,7 +29,8 @@ function owners(table: Record<string, string>): OwnerReader & { calls: number } 
     async readContract({ address }: { address: Address }) {
       r.calls++;
       const o = table[address];
-      if (!o) throw new Error("execution reverted");
+      if (o === "down") throw new Error("fetch failed: 503");
+      if (!o) throw new ContractFunctionZeroDataError({ functionName: "owner" });
       return o;
     },
   };
@@ -79,6 +81,10 @@ describe("readOwner", () => {
     expect(await readOwner(owners({}), PAYTO)).toBeNull();
     expect(await readOwner(owners({ [PAYTO]: `0x${"0".repeat(40)}` }), PAYTO)).toBeNull();
     expect(await readOwner(owners({ [PAYTO]: "garbage" }), PAYTO)).toBeNull();
+  });
+
+  it("throws when the RPC fails, since that says nothing about the owner", async () => {
+    await expect(readOwner(owners({ [PAYTO]: "down" }), PAYTO)).rejects.toThrow(/503/);
   });
 });
 
@@ -153,6 +159,18 @@ describe("contracts linked to an agent", () => {
     await cards.batch();
     expect(db.prepare("SELECT COUNT(*) AS n FROM agent_links").get()).toEqual({ n: 0 });
     expect(loadContext(db).agentIds.get(PAYTO)).toBeUndefined();
+  });
+
+  it("keeps a link when a later owner() lookup fails, and tries again within the hour", async () => {
+    const { db } = await setup({ [PAYTO]: OWNER }, [
+      { name: "agentWallet", endpoint: `eip155:42220:${PAYTO}` },
+    ]);
+    const down = new AgentCards(db, "https://ipfs.invalid/", () => {}, owners({ [PAYTO]: "down" }));
+    const now = Math.floor(Date.now() / 1000);
+    expect(await down.linkPass(50, now + 86_400 + 60)).toBe(1);
+    expect(loadContext(db).agentIds.get(PAYTO)).toEqual(["7"]);
+    expect(await down.linkPass(50, now + 86_400 + 120)).toBe(0);
+    expect(await down.linkPass(50, now + 86_400 + 3_700)).toBe(1);
   });
 
   it("re-reads owner() after a day, not before", async () => {

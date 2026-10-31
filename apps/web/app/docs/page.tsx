@@ -23,6 +23,7 @@ const SECTIONS = [
   ["payer", "Check a payer"],
   ["independent", "Independent payers"],
   ["trust", "Trust model"],
+  ["faq", "Questions"],
   ["methodology", "Methodology"],
   ["pricing", "Pricing and limits"],
   ["selfhost", "Run your own"],
@@ -265,7 +266,21 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             and lets payments through if Assay is unreachable, unless the buyer asks for stricter. Every
             finding links its transactions, sellers can answer any finding in their own words, and a rule that
             misjudges a case is fixed in the open, with a test and a new method version, never with a one-off
-            override. Report a wrong rating as a{" "}
+            override.
+          </p>
+          <p>
+            <strong>Audited.</strong> Savant.Chat audited the funding trace and the scoring code on 30 Oct
+            2026 and found five defects, two rated high. All five were reproduced with a failing test, fixed,
+            and the data they had already written repaired, in method 2026.10-4. One fix lowered real ratings:
+            wallets created just before paying a seller now count half, as the method always said. The list is
+            in{" "}
+            <a
+              className="link"
+              href="https://github.com/Oshioke-Salaki/assay/blob/main/docs/METHODOLOGY.md#changes-from-the-october-2026-audit"
+            >
+              METHODOLOGY.md
+            </a>
+            . Report a wrong rating as a{" "}
             <a className="link" href="https://github.com/Oshioke-Salaki/assay/issues">
               GitHub issue
             </a>
@@ -275,6 +290,44 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             </a>
             .
           </p>
+        </Panel>
+
+        <Panel title="Questions" id="faq">
+          <dl className={docs.faq}>
+            <dt>Can a seller fake a good rating?</dt>
+            <dd>
+              Not cheaply with money it controls. Payers the seller funded, directly, one wallet removed or
+              through a contract, count for nothing, and so does money that goes round a loop. What Assay
+              cannot see is a seller that funds sock wallets from an exchange withdrawal, which looks like any
+              customer&rsquo;s. That costs real money per wallet, and it is the gap Self proofs close: one
+              human behind many wallets counts once.
+            </dd>
+            <dt>Can a competitor get an honest seller rated down?</dt>
+            <dd>
+              Paying a seller never lowers its rating: a payer the seller did not fund is organic. Sending a
+              seller&rsquo;s customers a zero-value transfer to pose as their funder does nothing, since
+              zero-value transfers never count. A wallet that buys or sells over x402 is never treated as a
+              neutral source like an exchange.
+            </dd>
+            <dt>What if Assay&rsquo;s data is wrong or a lookup fails?</dt>
+            <dd>
+              A failed lookup is retried, never recorded as an answer. Until a payer&rsquo;s funding is traced
+              it counts as independent and the report says how much is traced. The guard lets payments through
+              when Assay is unreachable unless the buyer asks it not to.
+            </dd>
+            <dt>Can Assay change a score for someone?</dt>
+            <dd>
+              There are no manual overrides and paying Assay never changes a rating. Every signed score
+              records its block and time, and <code>verify</code> replays it from your own node, so a score
+              that does not follow from the chain can be shown not to.
+            </dd>
+            <dt>Who checked Assay?</dt>
+            <dd>
+              Savant.Chat audited the funding trace and scoring code on 30 Oct 2026; all five findings are
+              fixed (above). The code is open, and Assay rates itself by the same rules on{" "}
+              <Link href="/stats">/stats</Link>.
+            </dd>
+          </dl>
         </Panel>
 
         <Panel title="Methodology" id="methodology">
@@ -299,7 +352,8 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             <li>
               <strong>The seller paid for it.</strong> A payer first funded by the seller, or by a wallet the
               seller funded, counts for nothing. Funding sent through a contract (a batch sender, say) is
-              credited to whoever called the contract, so routing it through one changes nothing.
+              credited to whoever called the contract, so routing it through one changes nothing. A zero-value
+              transfer is never funding: anyone can send one to any wallet.
             </li>
             <li>
               <strong>It shares the seller&rsquo;s purse.</strong> A payer funded by the seller&rsquo;s own
@@ -399,10 +453,10 @@ POST ${API_PUBLIC}/v1/watch        # x402, $0.05
           <p>
             Every report with revenue carries &ldquo;What would raise this rating&rdquo;: how many more
             independent customers reach the next rating, what time and activity add, and what identity is
-            worth, each computed by running the real score formula on the changed input. It cannot be gamed:
-            payers you funded or that share your funder are struck out before anything is scored, so the only
-            lever that moves a rating is real customers. Also at <code>GET /v1/address/:address/plan</code>{" "}
-            and the MCP tool <code>assay_rating_plan</code>.
+            worth, each computed by running the real score formula on the changed input. Payers you funded or
+            that share your funder are struck out before anything is scored, so the plan never suggests a way
+            up that the funding trace would catch. Also at <code>GET /v1/address/:address/plan</code> and the
+            MCP tool <code>assay_rating_plan</code>.
           </p>
         </Panel>
 

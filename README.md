@@ -44,7 +44,7 @@ cd contracts && forge test     # AssayRegistry, including a signature made by th
 
 ## Docs
 
-- [Trust model](docs/TRUST.md): what is onchain, what is not, and how to verify any signed score from your own node (`pnpm --filter @assay/server verify`).
+- [Trust model](docs/TRUST.md): what is onchain, what is not, how to verify any signed score from your own node (`pnpm --filter @assay/server verify`), and the outside audit of 30 Oct 2026 (five findings, all fixed).
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Methodology](docs/METHODOLOGY.md)

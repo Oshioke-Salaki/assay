@@ -189,6 +189,8 @@ export class Enricher {
       log.warn("self lookup batch failed", { addresses: addresses.length, reason });
       return 0;
     }
+    // A failed call is not "no human": that address keeps its last reading and is asked again.
+    const failed = new Set(addresses.filter((_, i) => ids[i]?.status !== "success"));
     const found = addresses
       .map((a, i) => ({ address: a, id: ids[i]?.status === "success" ? (ids[i]!.result as bigint) : 0n }))
       .filter((x) => x.id > 0n);
@@ -234,6 +236,10 @@ export class Enricher {
       const fresh = details[i * PER + 1];
       const nullifier = details[i * PER + 2];
       const tier = details[i * PER + 3];
+      if (has?.status !== "success" || fresh?.status !== "success" || nullifier?.status !== "success") {
+        failed.add(f.address);
+        return;
+      }
       if (has?.status === "success" && has.result === true && nullifier?.status === "success") {
         byAddress.set(f.address, {
           agentId: f.id.toString(),
@@ -250,12 +256,14 @@ export class Enricher {
     );
     this.db.transaction(() => {
       for (const a of addresses) {
+        if (failed.has(a)) continue;
         const h = byAddress.get(a);
         upsert.run(a, h?.agentId ?? null, h?.nullifier ?? null, h?.fresh ? 1 : 0, h?.visaTier ?? 0, nowSec());
       }
     })();
+    if (failed.size > 0) log.warn("self lookups failed", { failed: failed.size, of: addresses.length });
     if (byAddress.size > 0) this.markDirty();
-    return addresses.length;
+    return addresses.length - failed.size;
   }
 
   /** Runs until aborted. Each pass does a bounded amount of work, then yields. */
