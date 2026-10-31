@@ -278,22 +278,31 @@ export class Enricher {
     while (!signal.aborted) {
       let done = 0;
       try {
-        const toBlock = await scan.head();
-        done = await fundingPass(this.db, scan.source, scan.rpc, {
-          batch: scan.batch ?? 500,
-          toBlock,
-          signal,
-        });
+        // Without the portal the scans wait, but the recheck still settles every row it can from
+        // what is stored (a known transaction, a funder that trades over x402).
+        let toBlock: number | null = null;
+        try {
+          toBlock = await scan.head();
+        } catch (err) {
+          log.warn("funding scan: portal unavailable", { error: String(err).slice(0, 200) });
+        }
+        if (toBlock !== null)
+          done = await fundingPass(this.db, scan.source, scan.rpc, {
+            batch: scan.batch ?? 500,
+            toBlock,
+            signal,
+          });
         done += await recheckContractFunding(this.db, scan.source, scan.rpc, {
           batch: scan.batch ?? 500,
           toBlock,
           signal,
         });
-        done += await rescanFunding(this.db, scan.source, scan.rpc, {
-          batch: scan.batch ?? 500,
-          toBlock,
-          signal,
-        });
+        if (toBlock !== null)
+          done += await rescanFunding(this.db, scan.source, scan.rpc, {
+            batch: scan.batch ?? 500,
+            toBlock,
+            signal,
+          });
         if (done > 0) this.markDirty();
       } catch (err) {
         log.warn("funding scan failed", { error: String(err) });

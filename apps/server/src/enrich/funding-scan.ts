@@ -351,7 +351,7 @@ export async function recheckContractFunding(
   db: DB,
   source: BlockSource,
   rpc: FunderClassifier,
-  opts: { batch?: number; toBlock: number; signal?: AbortSignal },
+  opts: { batch?: number; toBlock: number | null; signal?: AbortSignal },
 ): Promise<number> {
   const rows = db
     .prepare(
@@ -383,11 +383,14 @@ export async function recheckContractFunding(
     else if (r.funding_tx) updates.push({ address: r.address, kind: "later" });
     else toScan.push(r);
   }
-  if (toScan.length > 0) {
+  // No portal head: rows that need the log scan wait for it.
+  if (opts.toBlock === null) for (const r of toScan) updates.push({ address: r.address, kind: "later" });
+  else if (toScan.length > 0) {
+    const toBlock = opts.toBlock;
     const found = await scanFirstFunders(
       source,
       toScan.map((r) => r.address),
-      { toBlock: opts.toBlock, signal: opts.signal },
+      { toBlock, signal: opts.signal },
     );
     if (opts.signal?.aborted) return 0;
     for (const r of toScan) {

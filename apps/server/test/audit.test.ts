@@ -231,6 +231,36 @@ describe("audit repairs on rows written before the fixes", () => {
     expect(await rescanFunding(db, src, chain(), { toBlock: 1_000 })).toBe(0);
   });
 
+  it("the recheck settles what it can while the portal is down, and leaves the rest queued", async () => {
+    const db = memoryDb();
+    paying(db);
+    const P2 = "0x00000000000000000000000000000000000000a2";
+    db.prepare(
+      "INSERT INTO funder_profiles (address, is_public, reason, fetched_at) VALUES (?, 1, 'contract', ?)",
+    ).run(DISPERSE, NOW);
+    const fund = db.prepare(
+      `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error, funding_tx, funded_via, attributed)
+       VALUES (?, ?, 1, 1, 1, 1, NULL, ?, NULL, 0)`,
+    );
+    fund.run(P1, DISPERSE, txOf(40)); // transaction known: no scan needed
+    fund.run(P2, DISPERSE, null); // needs the scan
+    const down: BlockSource = {
+      finalizedHead: async () => {
+        throw new Error("529");
+      },
+      // biome-ignore lint/correctness/useYield: a portal that fails before yielding anything
+      async *stream() {
+        throw new Error("529");
+      },
+    };
+    expect(await recheckContractFunding(db, down, chain(), { toBlock: null })).toBe(1);
+    expect(row(db, P1)).toMatchObject({ funder: SELLER, funded_via: DISPERSE });
+    expect(db.prepare("SELECT attributed, error FROM funding WHERE address = ?").get(P2)).toEqual({
+      attributed: 0,
+      error: null,
+    });
+  });
+
   it("the recheck re-attributes a participant funder recorded as public, without a scan", async () => {
     const db = memoryDb();
     paying(db);
