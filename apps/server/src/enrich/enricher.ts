@@ -17,6 +17,8 @@ import {
   type FunderProfile,
   fundingPass,
   recheckContractFunding,
+  rescanFunding,
+  SCAN_VERSION,
 } from "./funding-scan.js";
 
 const DAY = 86_400;
@@ -82,12 +84,13 @@ export class Enricher {
   async fundingBatch(limit = 40, signal?: AbortSignal): Promise<number> {
     const queue = this.fundingQueue(limit);
     const upsert = this.db.prepare(
-      `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error, funding_tx, funded_via)
-       VALUES (@address, @funder, @fundedAt, @firstSeenAt, @isPublic, @now, @error, @tx, @via)
+      `INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error,
+         funding_tx, funded_via, attributed, scan_version)
+       VALUES (@address, @funder, @fundedAt, @firstSeenAt, @isPublic, @now, @error, @tx, @via, @attributed, ${SCAN_VERSION})
        ON CONFLICT (address) DO UPDATE SET funder = excluded.funder, funded_at = excluded.funded_at,
          first_seen_at = excluded.first_seen_at, funder_is_public = excluded.funder_is_public,
          fetched_at = excluded.fetched_at, error = excluded.error, funding_tx = excluded.funding_tx,
-         funded_via = excluded.funded_via`,
+         funded_via = excluded.funded_via, attributed = excluded.attributed, scan_version = excluded.scan_version`,
     );
     const senderOf = async (hash: Hex): Promise<Address> => (await this.client.getTransaction({ hash })).from;
     let done = 0;
@@ -111,9 +114,10 @@ export class Enricher {
           isPublic: c?.isPublic ? 1 : 0,
           now: nowSec(),
           error: null,
-          // Without its transaction, a contract funding is picked up again by the recheck.
-          tx: c?.settled ? f.tx : null,
+          // Kept even when the sender could not be read: the recheck reads it from here.
+          tx: f.tx,
           via: c?.via ?? null,
+          attributed: c && !c.settled ? 0 : 1,
         });
       } catch (err) {
         upsert.run({
@@ -126,6 +130,7 @@ export class Enricher {
           error: String(err).slice(0, 300),
           tx: null,
           via: null,
+          attributed: 1,
         });
       }
       done++;
@@ -272,6 +277,11 @@ export class Enricher {
           signal,
         });
         done += await recheckContractFunding(this.db, scan.source, scan.rpc, {
+          batch: scan.batch ?? 500,
+          toBlock,
+          signal,
+        });
+        done += await rescanFunding(this.db, scan.source, scan.rpc, {
           batch: scan.batch ?? 500,
           toBlock,
           signal,

@@ -1,5 +1,5 @@
 import { RATING_FLOORS, ratingFor, scoreFrom, THIN_FILE } from "./assess.js";
-import type { Assessment, Rating } from "./types.js";
+import type { Assessment, Rating, ScoreComponents } from "./types.js";
 
 /**
  * What would raise this rating. Every number here comes from running the real score formula
@@ -62,6 +62,19 @@ function median(xs: number[]): number {
 const usd = (n: number) =>
   n >= 100 ? `$${Math.round(n).toLocaleString("en-US")}` : n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(3)}`;
 
+/**
+ * The payer index after k new independent customers paying `typical` each, added to the same
+ * weights the score used: (W + k·t)² / (D + k·t²), where W is the discounted organic dollars and
+ * D = W² / E is recovered from the current index. An assessment from before 2026.10-4 has no W;
+ * its undiscounted organic revenue stands in.
+ */
+export function effectivePayersWith(c: ScoreComponents, k: number, typical: number, organicUsd = 0): number {
+  const E = c.effectivePayers;
+  const W = c.payerWeightUsd ?? organicUsd;
+  if (!(W > 0 && E > 0)) return k;
+  return (W + k * typical) ** 2 / (W ** 2 / E + k * typical ** 2);
+}
+
 export function ratingPlan(a: Assessment): RatingPlan {
   const c = a.components;
   const s = a.seller;
@@ -114,14 +127,12 @@ export function ratingPlan(a: Assessment): RatingPlan {
   const credited = s.payerLines.filter((l) => l.creditedUsd > 0).map((l) => l.creditedUsd);
   const typical = Math.max(0.01, median(credited.length > 0 ? credited : s.payerLines.map((l) => l.usd)));
   const T = s.organicUsd;
-  const E = c.effectivePayers;
   const simulate = (k: number) => {
     const added = k * typical;
     const organic = T + added;
     const gross = s.grossUsd + added;
     const quality = Math.min(1, organic / gross);
-    // Inverse Herfindahl with k equal new groups added to the current weights.
-    const effectivePayers = T > 0 && E > 0 ? (T + added) ** 2 / (T ** 2 / E + k * typical ** 2) : k;
+    const effectivePayers = effectivePayersWith(c, k, typical, T);
     return scoreFrom({
       quality,
       effectivePayers,

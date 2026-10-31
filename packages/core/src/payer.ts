@@ -100,7 +100,8 @@ export function payerCheck(
       `Has paid ${b.sellers === 1 ? "one seller" : `${b.sellers.toLocaleString("en-US")} sellers`} over x402, ${b.settlements.toLocaleString("en-US")} payment${b.settlements === 1 ? "" : "s"} in all.`,
     );
   }
-  if (f?.funder && !f.funderIsPublic && b.counterparties.some((c) => c.payee === f.funder)) {
+  // A seller it pays is an x402 participant, so however its profile reads it is not a public source.
+  if (f?.funder && b.counterparties.some((c) => c.payee === f.funder)) {
     caution = true;
     reasons.push("Was first funded by a seller it pays, which is how sock wallets are made.");
   }

@@ -1,4 +1,4 @@
-# Methodology (version 2026.10-3)
+# Methodology (version 2026.10-4)
 
 ## What counts as a settlement
 
@@ -22,7 +22,9 @@ For a seller *S*, each payer *P* is classified, first match wins:
 
 **Loops.** Money that can travel from *S* back to *S* through payments forms a strongly connected component (iterative Tarjan, no recursion limit). Within it, only net inflow counts: *offset = min(paid to S by the loop, paid by S to the loop)*, allocated across loop payers in proportion to what each paid. Two businesses that really trade with each other keep the difference; a ring that passes the same dollars round keeps nothing.
 
-**Public funders.** A funder is public when it is a contract or has sent at least 5,000 transactions (the Blockscout fallback also counts a Blockscout tag or 20,000 token transfers), unless it buys or sells over x402 itself. Sharing a public funder (an exchange, a bridge) says nothing about two wallets.
+**First funding.** A payer's first funder is the sender of the first transfer into it, of CELO, a Mento dollar or an x402 token, that moves a non-zero amount. Mints and transfers to oneself do not count, and neither do zero-value transfers: anyone can send one to any address, so counting it would let a stranger, or the seller, choose who a wallet's first funder appears to be. Since version 2026.10-4.
+
+**Public funders.** A funder is public when it is a contract or has sent at least 5,000 transactions (the Blockscout fallback also counts a Blockscout tag or 20,000 token transfers), unless it buys or sells over x402 itself. Sharing a public funder (an exchange, a bridge) says nothing about two wallets. Participation is checked against the payments being scored, at the block being scored, so a wallet profiled as public before it started trading over x402 stops being public the moment it does, and a replay agrees. A profile lookup that fails is retried; it is never recorded as an answer.
 
 **Funding through a contract.** A contract that hands out tokens (a batch sender, a router, a faucet) did not decide to fund anyone; whoever sent the transaction did. So when a wallet's first funding came out of a public contract, Assay reads that transaction's sender and credits the funding to it, unless the sender is the funded wallet itself (it swapped, bridged or claimed for itself) or is public too (a relayer, bundler or exchange acting for many people). A seller that funds its payers through a batch-send contract is therefore treated exactly as one that sent them money directly, and the finding says the funding went through a contract. Reports show the contract under "First funded by". Since version 2026.10-2.
 
@@ -35,7 +37,7 @@ score = 100 × quality^1.5 × (0.55 × diversity + 0.45 × track) × dormancy + 
 | Term | Definition |
 | --- | --- |
 | quality | organic ÷ gross |
-| diversity | 1 − e^(−payers/6), where *payers* is the inverse Herfindahl index of organic revenue over payer groups. Payers with one private funder, or one Self human (same nullifier), form one group. Wallets first seen less than a day before paying, that never paid anyone else, weigh half. |
+| diversity | 1 − e^(−payers/6), where *payers* is the inverse Herfindahl index of organic revenue over payer groups. Payers with one private funder, or one Self human (same nullifier), form one group. Wallets first seen less than a day before paying, that never paid anyone else, count half: each group carries its organic dollars *u* and a weight *w*, which is *u* halved for such wallets, and the index is (Σw)² / Σ(w·u). Twelve equal disposable wallets count as 6 payers, twelve equal established ones as 12. |
 | track | 1 − e^(−days/10) over distinct UTC days with organic revenue |
 | dormancy | 1, then 0.85 after 30 idle days, 0.6 after 90 |
 | identity | +3 for an ERC-8004 identity (see below for contracts), +5 for a fresh Self proof (+2 if expired), only when quality ≥ 0.5 |
@@ -106,6 +108,16 @@ The Agents on Open Rails hackathon defines an independent user as a wallet that 
 ## Reviews
 
 Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback file names a settlement Assay finds onchain from the reviewer to the agent's owner, wallet or a linked contract; **paid customer** when the reviewer paid the agent before writing it; **never paid it** otherwise.
+
+## Changes from the October 2026 audit
+
+Savant.Chat audited the funding trace and the scoring code on 30 Oct 2026 and found five defects. Each was reproduced with a failing test before it was fixed, and rows the defects had already written were repaired, not just new ones. Version 2026.10-4.
+
+- **A cached profile outranked x402 participation.** A wallet profiled as public before its first x402 payment stayed public for the life of its cached profile, so a seller's batch send through a contract could keep the contract as the funder. Participation is now checked first, in the funding trace and in the score itself (above). Fundings recorded under the old order are attributed again.
+- **Zero-value transfers counted as funding.** Fixed as above. Rows whose stored first funding was a zero-value transfer are found by running the scan both ways, and replaced.
+- **A failed lookup was recorded as an answer.** An RPC error during a funder lookup read as "no code, nothing sent", so a contract or an exchange could be recorded as a private wallet. Errors now propagate and the funding is retried; profiles only an error could have produced were discarded.
+- **The recheck finalized fundings it could still resolve.** It gave up on a contract funding the log scan could not find (a native transfer, or one newer than the portal's head). The funding transaction is now kept even when its sender cannot be read yet, a recent funding waits, and one the scan cannot see goes back to the Blockscout fallback.
+- **The single-purpose discount cancelled out.** The plain inverse Herfindahl is scale-free, so halving every payer's dollars changed nothing when all of a seller's payers were disposable, and a disposable wallet that outspent a real customer raised diversity. The index above fixes both. Sellers whose revenue comes mostly from wallets created just before paying them rate lower than before.
 
 ## Known limits
 

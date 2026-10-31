@@ -313,7 +313,7 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             <code>100 × quality^1.5 × (0.55 × diversity + 0.45 × track) × dormancy + identity</code>, where
             quality is the organic share, diversity is <code>1 − e^(−payers/6)</code> over effective
             independent payers (an inverse Herfindahl in which wallets with one private funder, or one Self
-            human, count once and wallets created only to pay count half), track is{" "}
+            human, count once, and wallets created only to pay count half: n of them count n/2), track is{" "}
             <code>1 − e^(−days/10)</code> over days with organic revenue, dormancy is 0.85 after 30 idle days
             and 0.6 after 90, and identity adds up to 8 points for an ERC-8004 identity and a fresh Self
             proof, only when quality is 0.5 or more. An identity covers its owner and its agentWallet, and

@@ -7,7 +7,7 @@ What you trust when you use an Assay score, what is enforced onchain, and how to
 | | Where | What it guarantees |
 | --- | --- | --- |
 | The inputs | Celo mainnet | Every x402 settlement, every funding transfer, every ERC-8004 registration and Self proof Assay reads is public and the same for everyone. |
-| The rating | Off-chain, Assay's server | The scoring code (`packages/core/src/assess.ts`, method version 2026.10-3) turns those inputs into a rating. Nothing onchain checks that this computation was done correctly. |
+| The rating | Off-chain, Assay's server | The scoring code (`packages/core/src/assess.ts`, method version 2026.10-4) turns those inputs into a rating. Nothing onchain checks that this computation was done correctly. |
 | The signature | Off-chain, Assay's attester key | A paid check or attest returns an EIP-712 `Score` signed by the attester key. Anyone can recover the signer. |
 | The registry | Celo mainnet, AssayRegistry `0xf6679308af9ff1ffc11a968dfd1ea5882152e29f` | Stores a score only if the current attester signed it, it is well formed, and it has not expired (7 days). Contracts call `scoreOf(subject)` or `isInvestmentGrade(subject)`. |
 | The free report and `withAssayGuard` | Off-chain, over HTTPS | You trust the API's response. Use the paid check when you want a signature you can verify. |
@@ -66,7 +66,7 @@ A score sits in a payment path, so a mistake cuts both ways: an honest seller bl
 - **Anyone can recheck.** `verify` replays any signed score from public data, so a score that does not follow from the chain can be shown not to.
 - **Fixes are in the open.** A rule that misjudges a case is fixed in the code, with a test for the case, and the method version changes. There are no one-off overrides for a single address.
 
-Report a wrong rating as a GitHub issue (github.com/Oshioke-Salaki/assay/issues) with the address and what you think is wrong. The most recent rule change closed a gap the other way: funding sent through a batch-send contract is now credited to whoever called the contract (method 2026.10-2), so a seller cannot route its payers' funding through one to make them look independent. The change after it (2026.10-3) went the other way: a seller paid at a contract it owns can now carry its ERC-8004 identity there, by listing the contract in its registration file, after a seller pointed out that a contract that cannot sign could never be set as its `agentWallet`.
+Report a wrong rating as a GitHub issue (github.com/Oshioke-Salaki/assay/issues) with the address and what you think is wrong. The latest change (2026.10-4) fixed five defects an outside audit found in the funding trace and the score, each reproduced with a failing test first; METHODOLOGY.md lists them. One lowered real ratings: wallets created just before paying a seller now count half, as the method always said, where before the formula cancelled the discount out. An earlier change closed a gap the other way: funding sent through a batch-send contract is now credited to whoever called the contract (method 2026.10-2), so a seller cannot route its payers' funding through one to make them look independent. The change after it (2026.10-3) went the other way: a seller paid at a contract it owns can now carry its ERC-8004 identity there, by listing the contract in its registration file, after a seller pointed out that a contract that cannot sign could never be set as its `agentWallet`.
 
 ## What is still trusted
 

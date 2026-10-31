@@ -15,7 +15,7 @@ import type {
   SellerSide,
 } from "./types.js";
 
-export const METHODOLOGY_VERSION = "2026.10-3";
+export const METHODOLOGY_VERSION = "2026.10-4";
 
 const DAY = 86_400;
 
@@ -97,7 +97,11 @@ export function assess(ledger: Ledger, address: Address, ctx: AssessmentContext)
   if (seller.grossUsd > 0) {
     const credited = seller.payerLines.filter((l) => l.creditedUsd > 0);
     const quality = seller.grossUsd > 0 ? clamp(seller.organicUsd / seller.grossUsd, 0, 1) : 0;
-    const effectivePayers = effectiveIndependentPayers(credited, ledger, ctx);
+    const { effective: effectivePayers, weightUsd: payerWeightUsd } = effectiveIndependentPayers(
+      credited,
+      ledger,
+      ctx,
+    );
     const activeDays = organicActiveDays(ledger, address, credited);
     const lastOrganic = credited.reduce((m, l) => Math.max(m, l.lastTs), 0);
     const idle = lastOrganic === 0 ? Number.POSITIVE_INFINITY : (ctx.now - lastOrganic) / DAY;
@@ -116,7 +120,16 @@ export function assess(ledger: Ledger, address: Address, ctx: AssessmentContext)
       identityBonus,
       dormancyFactor,
     });
-    components = { quality, effectivePayers, diversity, activeDays, track, identityBonus, dormancyFactor };
+    components = {
+      quality,
+      effectivePayers,
+      payerWeightUsd,
+      diversity,
+      activeDays,
+      track,
+      identityBonus,
+      dormancyFactor,
+    };
 
     const thin =
       seller.settlements < THIN_FILE.minSettlements ||
@@ -187,7 +200,7 @@ function sellerSide(ledger: Ledger, s: Address, ctx: AssessmentContext): SellerS
 
   const lines: PayerLine[] = flows.map((f) => {
     const funding = ctx.funding.get(f.payer);
-    const cls = classifyPayer(f.payer, s, funding, sellerFunding, members, ctx);
+    const cls = classifyPayer(f.payer, s, funding, sellerFunding, members, ledger, ctx);
     const established = funding?.firstSeenAt != null && funding.firstSeenAt <= f.firstTs - 30 * DAY;
     return {
       payer: f.payer,
@@ -247,6 +260,7 @@ function classifyPayer(
   funding: FundingInfo | undefined,
   sellerFunding: FundingInfo | undefined,
   loopMembers: Set<Address>,
+  ledger: Ledger,
   ctx: AssessmentContext,
 ): PayerClass {
   const funder = funding?.funder ?? null;
@@ -254,10 +268,10 @@ function classifyPayer(
   // funder is: a high-volume wash wallet must not pass as an exchange.
   if (funder === seller) return "seller-funded";
   if (funder && funder !== payer && loopMembers.has(funder)) return "shared-funder";
-  if (funder && !funding?.funderIsPublic) {
+  if (funder && !funderIsPublic(funding, ledger)) {
     // One hop removed: the seller funded the wallet that funded the payer.
     if (ctx.funding.get(funder)?.funder === seller) return "seller-funded";
-    if (sellerFunding?.funder && !sellerFunding.funderIsPublic && funder === sellerFunding.funder) {
+    if (sellerFunding?.funder && !funderIsPublic(sellerFunding, ledger) && funder === sellerFunding.funder) {
       return "shared-funder";
     }
   }
@@ -266,12 +280,31 @@ function classifyPayer(
 }
 
 /**
+ * Whether sharing this funder says nothing about who controls the wallets: an exchange, a contract.
+ * An address that buys or sells over x402 itself is a participant, never a neutral source, however
+ * it was profiled; the ledger decides that at the block being scored, so a replay agrees.
+ */
+function funderIsPublic(f: FundingInfo | undefined, ledger: Ledger): boolean {
+  if (!f?.funder || !f.funderIsPublic) return false;
+  return ledger.payersOf(f.funder).length === 0 && ledger.payeesOf(f.funder).length === 0;
+}
+
+/**
  * Inverse Herfindahl over groups of payers that are probably one actor: same
  * non-public funder or same Self human. Wallets created only to pay this seller
  * count half.
+ *
+ * The plain index (Σu)² / Σu² is scale-free, so halving a group's dollars changes nothing when
+ * every group is halved. Each group therefore carries its discounted dollars w and its raw dollars
+ * u, and the index is (Σw)² / Σ(w·u): n equal groups count n, and n equal disposable ones count n/2.
+ * `weightUsd` is Σw, which the plan needs to add customers to the same index.
  */
-function effectiveIndependentPayers(lines: PayerLine[], ledger: Ledger, ctx: AssessmentContext): number {
-  if (lines.length === 0) return 0;
+function effectiveIndependentPayers(
+  lines: PayerLine[],
+  ledger: Ledger,
+  ctx: AssessmentContext,
+): { effective: number; weightUsd: number } {
+  if (lines.length === 0) return { effective: 0, weightUsd: 0 };
   const parent = lines.map((_, i) => i);
   const find = (i: number): number => {
     let r = i;
@@ -292,7 +325,7 @@ function effectiveIndependentPayers(lines: PayerLine[], ledger: Ledger, ctx: Ass
   lines.forEach((l, i) => {
     const f = ctx.funding.get(l.payer);
     const keys: string[] = [];
-    if (f?.funder && !f.funderIsPublic) keys.push(`f:${f.funder}`);
+    if (f?.funder && !funderIsPublic(f, ledger)) keys.push(`f:${f.funder}`);
     const h = ctx.humans.get(l.payer);
     if (h) keys.push(`h:${h.nullifier}`);
     for (const k of keys) {
@@ -301,15 +334,18 @@ function effectiveIndependentPayers(lines: PayerLine[], ledger: Ledger, ctx: Ass
       else union(seen, i);
     }
   });
-  const weights = new Map<number, number>();
+  const groups = new Map<number, { w: number; u: number }>();
   lines.forEach((l, i) => {
-    const w = l.creditedUsd * (isSinglePurpose(l, ledger, ctx) ? 0.5 : 1);
-    weights.set(find(i), (weights.get(find(i)) ?? 0) + w);
+    const g = groups.get(find(i)) ?? { w: 0, u: 0 };
+    g.w += l.creditedUsd * (isSinglePurpose(l, ledger, ctx) ? 0.5 : 1);
+    g.u += l.creditedUsd;
+    groups.set(find(i), g);
   });
-  const ws = [...weights.values()].filter((w) => w > 0);
-  const total = sum(ws);
-  if (total === 0) return 0;
-  return total ** 2 / sum(ws.map((w) => w * w));
+  const gs = [...groups.values()].filter((g) => g.w > 0);
+  const weightUsd = sum(gs.map((g) => g.w));
+  const denom = sum(gs.map((g) => g.w * g.u));
+  if (weightUsd === 0 || denom === 0) return { effective: 0, weightUsd: 0 };
+  return { effective: weightUsd ** 2 / denom, weightUsd };
 }
 
 function isSinglePurpose(line: PayerLine, ledger: Ledger, ctx: AssessmentContext): boolean {

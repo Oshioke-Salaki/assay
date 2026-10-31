@@ -136,6 +136,11 @@ export interface ScoreComponents {
   quality: number;
   /** Effective number of independent payers (inverse Herfindahl over payer groups). */
   effectivePayers: number;
+  /**
+   * Organic dollars after the single-purpose discount (Σw in the payer index). The plan adds new
+   * customers to it; absent on assessments made before method 2026.10-4.
+   */
+  payerWeightUsd?: number;
   diversity: number;
   activeDays: number;
   track: number;

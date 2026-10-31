@@ -116,16 +116,18 @@ Delivery: 10-second timeout, redirects not followed, retried after 1, 5, 30, 120
   "role": "seller | buyer | both | none",
   "score": 74,
   "rating": "A",
-  "components": { "quality": 0.93, "effectivePayers": 11.2, "diversity": 0.84, "activeDays": 19, "track": 0.85, "identityBonus": 3, "dormancyFactor": 1 },
+  "components": { "quality": 0.93, "effectivePayers": 11.2, "payerWeightUsd": 1840.5, "diversity": 0.84, "activeDays": 19, "track": 0.85, "identityBonus": 3, "dormancyFactor": 1 },
   "seller": { "grossUsd": 120.5, "organicUsd": 112.1, "loopOffsetUsd": 8.4, "fundedUsd": 0, "settlements": 410, "payers": 14, "organicPayers": 13, "payerLines": [] },
   "buyer": { "spentUsd": 3.1, "loopSpendUsd": 0, "sellers": 2, "counterparties": [] },
   "loop": { "size": 2, "members": ["0x…", "0x…"] },
   "flags": [{ "code": "CIRCULAR_FLOW", "severity": "warning", "title": "Circular revenue", "detail": "…", "usd": 8.4, "addresses": [], "txs": [] }],
   "identity": { "agentIds": ["1853"], "human": { "agentId": "12", "nullifier": "…", "fresh": true }, "funding": { "funder": "0x…", "fundedAt": 1790000000, "firstSeenAt": 1789000000, "funderIsPublic": true, "fundedVia": null } },
   "fundingCoverage": 1,
-  "methodologyVersion": "2026.10-3"
+  "methodologyVersion": "2026.10-4"
 }
 ```
+
+`components.payerWeightUsd` is organic revenue after the single-purpose discount, the Σw of the payer index; with `effectivePayers` it is enough to add customers to the index exactly. Absent on assessments before 2026.10-4.
 
 `identity.funding.fundedVia` is the contract a wallet's first funding passed through, when `funder` is whoever called that contract (a batch sender, say); null for a direct transfer.
 

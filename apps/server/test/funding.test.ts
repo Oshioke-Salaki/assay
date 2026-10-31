@@ -275,11 +275,12 @@ describe("funding through a contract", () => {
     paying(db, P1);
     const src = portal([transfer(70, DISPERSE, P1)]);
     await fundingPass(db, src, chain({ 70: SELLER }, { failSender: true }), { toBlock: 1_000 });
+    // The transaction is kept, so the recheck can read its sender without finding it again.
     expect(row(db, P1)).toEqual({
       funder: DISPERSE,
       funder_is_public: 1,
       funded_via: null,
-      funding_tx: null,
+      funding_tx: txOf(70),
     });
     // Still failing: the row stays queued, nothing is counted as done.
     expect(
@@ -296,11 +297,11 @@ describe("funding through a contract", () => {
     expect(await recheckContractFunding(db, src, chain({ 70: SELLER }), { toBlock: 1_000 })).toBe(0);
   });
 
-  it("rechecks contract funding recorded before contracts were seen through, and gives up on transfers it cannot find", async () => {
+  it("rechecks contract funding recorded before contracts were seen through, and hands transfers it cannot find to Blockscout", async () => {
     const db = memoryDb();
     paying(db, P1, P2);
     const old = db.prepare(
-      "INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error) VALUES (?, ?, 1, 1, 1, 5, NULL)",
+      "INSERT INTO funding (address, funder, funded_at, first_seen_at, funder_is_public, fetched_at, error, attributed) VALUES (?, ?, 1, 1, 1, 5, NULL, 0)",
     );
     old.run(P1, DISPERSE);
     old.run(P2, DISPERSE);
@@ -316,7 +317,19 @@ describe("funding through a contract", () => {
       funded_via: DISPERSE,
       funding_tx: txOf(80),
     });
-    expect(row(db, P2)).toEqual({ funder: DISPERSE, funder_is_public: 1, funded_via: null, funding_tx: "" });
+    // Not finalized as public: the Blockscout fallback reads it again, with its transaction.
+    expect(row(db, P2)).toEqual({
+      funder: DISPERSE,
+      funder_is_public: 1,
+      funded_via: null,
+      funding_tx: null,
+    });
+    expect(
+      (db.prepare("SELECT error FROM funding WHERE address = ?").get(P2) as { error: string }).error,
+    ).toMatch(/recheck: the log scan did not find the transfer/);
+    expect(
+      new Enricher(db, {} as never, {} as never, () => {}).fundingQueue(10, Date.now() / 1000 + 2 * 86_400),
+    ).toContain(P2);
     expect(await recheckContractFunding(db, src, chain({ 80: SELLER }), { toBlock: 1_000 })).toBe(0);
   });
 

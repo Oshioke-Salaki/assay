@@ -249,6 +249,26 @@ const MIGRATIONS: string[] = [
   ) WITHOUT ROWID;
   CREATE INDEX agent_links_address ON agent_links (address);
   `,
+  // v11 (audit of 30 Oct 2026): a funding is "attributed" once its sender question is settled, so
+  // its transaction can be kept while the sender is unread; scan_version marks rows the log scan
+  // has checked since zero-value transfers stopped counting as funding. Then repair what the old
+  // rules got wrong: drop cached profiles of x402 participants and of funders recorded as having
+  // sent nothing (only an RPC failure produces that), and attribute their fundings again.
+  `
+  ALTER TABLE funding ADD COLUMN attributed INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE funding ADD COLUMN scan_version INTEGER NOT NULL DEFAULT 0;
+  UPDATE funding SET attributed = 0, funding_tx = NULLIF(funding_tx, '')
+    WHERE error IS NULL AND funded_via IS NULL AND funder IS NOT NULL AND (
+      (funder_is_public = 1 AND funder IN (SELECT address FROM funder_profiles WHERE reason LIKE 'contract%'))
+      OR funder IN (SELECT address FROM funder_profiles WHERE reason = '0 transactions sent'));
+  UPDATE funding SET attributed = 0
+    WHERE error IS NULL AND funded_via IS NULL AND funder_is_public = 1
+      AND funder IN (SELECT payer FROM pair_days UNION SELECT payee FROM pair_days);
+  DELETE FROM funder_profiles
+    WHERE reason = '0 transactions sent'
+       OR address IN (SELECT payer FROM pair_days UNION SELECT payee FROM pair_days);
+  CREATE INDEX funding_attributed ON funding (attributed) WHERE attributed = 0;
+  `,
 ];
 
 export function openDatabase(path: string): DB {
@@ -262,9 +282,10 @@ export function openDatabase(path: string): DB {
   return db;
 }
 
-function migrate(db: DB): void {
+/** Bring the schema up to `target` (all migrations by default); tests stop short to seed old rows. */
+export function migrate(db: DB, target = MIGRATIONS.length): void {
   const current = db.pragma("user_version", { simple: true }) as number;
-  for (let v = current; v < MIGRATIONS.length; v++) {
+  for (let v = current; v < target; v++) {
     db.transaction(() => {
       db.exec(MIGRATIONS[v]!);
       db.pragma(`user_version = ${v + 1}`);

@@ -356,7 +356,9 @@ describe("edge cases", () => {
       ctx({ funding: payers.slice(0, 2).map((p) => [p, { firstSeenAt: firstPay - 600 }]) }),
     );
     expect(a.flags.map((f) => f.code)).toContain("SINGLE_PURPOSE_PAYERS");
-    expect(a.components?.effectivePayers).toBeCloseTo(30 ** 2 / (2 * 5 ** 2 + 2 * 10 ** 2), 5);
+    // Two disposable wallets count half each, two established ones count fully: 3 payers.
+    expect(a.components?.effectivePayers).toBeCloseTo(30 ** 2 / (2 * 5 * 10 + 2 * 10 * 10), 5);
+    expect(a.components?.effectivePayers).toBeCloseTo(3, 5);
   });
 
   it("credits established payers", () => {
