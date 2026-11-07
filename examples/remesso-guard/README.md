@@ -26,9 +26,10 @@ try {
 
 ## What it does
 
-- **Guards every path that pays:** `pay`, `remittances.send`, `agents.pay` and `requests.pay`. Everything else on the client is untouched.
+- **Guards every path that pays:** `pay`, `remittances.send`, `agents.pay`, `requests.pay`, `invoices.pay` and `schedules.create` (a schedule is checked once, when it's created). Everything else on the client is untouched.
 - **Pins the wallet it checked.** `agents.pay` resolves the agent's ERC-8004 wallet, checks it, and passes it to Remesso as `expectedWallet`. If the wallet changes between the check and the payment, the payment fails.
-- **Links each payment to its check onchain.** When you set no memo, the payment's memo becomes `assay pass A 1f2e3d4c`: the verdict, the rating and a short hash of Assay's EIP-712 signature. Anyone holding the signed score can match it to the payment. A memo you set yourself is kept.
+- **Leaves your payment as it is.** Apart from pinning the wallet in `agents.pay`, the wrapper never changes what you send, so Remesso's own rules apply unchanged. Each decision goes to `onDecision` with Assay's signed score and the payment's `idempotencyKey`, so you can store the proof next to the payment record.
+- **Optional memo.** With `memo: true`, a policy payment that has no memo and answers no request carries `assay pass A`. Wallet payments and request payments are left alone, because Remesso refuses a memo on those. A key keeps the memo it was first sent with, so a retry under the same `idempotencyKey` matches it.
 - **Is cheap.** Verdicts are cached for 10 minutes, and concurrent checks of one address share a single call.
 - **Sensible defaults.** Only a `block` verdict stops a payment unless you set `minRating` (for example `"BB"`). `allowUnrated` (default `true`) decides whether brand-new addresses can be paid. If Assay can't be reached, nothing is paid unless you set `onAssayError: "allow"`.
 - **Has a free mode.** Without a paying fetch it uses Assay's free check: the same verdict, unsigned.
@@ -39,7 +40,7 @@ try {
 npm install
 node demo.mjs 9981            # an ERC-8004 agent id, resolved with Remesso's own agents.find
 node demo.mjs 0x5df8ae2b963165b735b18ca86b1ea448d2aa032c --quote   # an address; --quote shows the USA₮ price of the paid check
-npm test                      # the wrapper's behaviour, with stand-ins: nothing is paid
+npm test                      # 13 tests, some against the real remesso-sdk: nothing is paid
 ```
 
 The demo never pays anyone. Set `ASSAY_PAYER_KEY` (a wallet holding a little USA₮) to make the check the paid, signed one: it costs $0.002.

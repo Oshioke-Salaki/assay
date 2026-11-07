@@ -1,7 +1,7 @@
 // node demo.mjs <ERC-8004 agent id | 0x address> [--quote]
 //
 // Resolves the recipient the way a Remesso agent would, asks Assay about it and prints the
-// decision and the memo a payment would carry. It never pays the recipient.
+// decision. It never pays the recipient.
 //   - with ASSAY_PAYER_KEY set (a wallet holding USA₮), the check is the paid one: $0.002 in USA₮
 //     over x402, returning a score signed by Assay;
 //   - without it, the free check: the same verdict, unsigned;
@@ -48,4 +48,4 @@ const ok = remesso.assay.allowed(r);
 console.log(`Assay: ${r.verdict}, rated ${r.rating}${r.organicShare == null ? "" : `, ${Math.round(r.organicShare * 100)}% organic`}`);
 for (const why of r.reasons) console.log(`  - ${why}`);
 console.log(r.attestation ? `signed by ${r.attestation.signer}` : "free check (unsigned); set ASSAY_PAYER_KEY for the signed one");
-console.log(ok ? `would pay, with memo "${remesso.assay.memoFor(r)}"` : "would NOT pay: RecipientBlockedError");
+console.log(ok ? "would pay" : "would NOT pay: RecipientBlockedError");

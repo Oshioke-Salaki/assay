@@ -55,6 +55,19 @@ function stubRemesso() {
         return { status: "confirmed" };
       },
     },
+    invoices: {
+      verify: async () => "verified",
+      async pay(invoice) {
+        paid.push({ via: "invoices.pay", invoice });
+        return { status: "confirmed" };
+      },
+    },
+    schedules: {
+      async create(input) {
+        paid.push({ via: "schedules.create", input });
+        return { id: 1n };
+      },
+    },
     requests: {
       async get(id) {
         return { id, to: id === "r-bad" ? BAD : GOOD };
@@ -74,16 +87,55 @@ test("a blocked recipient is never paid, on any path", async () => {
   await assert.rejects(g.remittances.send({ to: BAD, amount: "1", token: "USAT", funding: "wallet", idempotencyKey: "b" }), RecipientBlockedError);
   await assert.rejects(g.agents.pay(2, { funding: "wallet", amount: "1", token: "USAT", idempotencyKey: "c" }), RecipientBlockedError);
   await assert.rejects(g.requests.pay("r-bad"), RecipientBlockedError);
+  await assert.rejects(g.invoices.pay({ message: { recipient: BAD, orderId: "o1" } }, { funding: "wallet" }), RecipientBlockedError);
+  await assert.rejects(g.schedules.create({ to: BAD, amount: "1", token: "USAT", every: "week" }), RecipientBlockedError);
   assert.equal(r.paid.length, 0);
 });
 
-test("a passing recipient is paid, and the memo links the payment to the signed check", async () => {
+test("by default the payment is passed through unchanged", async () => {
   const r = stubRemesso();
   const g = withAssay(r, { assay: stubAssay() });
-  await g.remittances.send({ to: GOOD, amount: "1", token: "USAT", funding: "wallet", idempotencyKey: "d" });
-  const memo = r.paid[0].input.memo;
-  assert.match(memo, /^assay pass A [0-9a-f]{8}$/);
-  assert.doesNotThrow(() => memo32(memo)); // fits Remesso's 32-byte onchain memo
+  const input = { to: GOOD, amount: "1", token: "USAT", funding: "policy", idempotencyKey: "d" };
+  await g.remittances.send(input);
+  assert.deepEqual(r.paid[0].input, input);
+});
+
+test("memo: true tags only policy payments that answer no request, and fits 32 bytes", async () => {
+  const r = stubRemesso();
+  const g = withAssay(r, { assay: stubAssay(), memo: true });
+  await g.remittances.send({ to: GOOD, amount: "1", token: "USAT", funding: "policy", idempotencyKey: "d1" });
+  await g.remittances.send({ to: GOOD, amount: "1", token: "USAT", funding: "wallet", idempotencyKey: "d2" });
+  await g.remittances.send({ to: GOOD, amount: "1", token: "USAT", funding: "policy", requestId: "q", idempotencyKey: "d3" });
+  await g.pay({ to: GOOD, amount: "1", idempotencyKey: "d4" });
+  assert.equal(r.paid[0].input.memo, "assay pass A");
+  assert.equal("memo" in r.paid[1].input, false);
+  assert.equal("memo" in r.paid[2].input, false);
+  assert.equal(r.paid[3].input.memo, "assay pass A");
+  assert.doesNotThrow(() => memo32("assay caution CCC")); // the longest one
+});
+
+test("a retry under the same key carries the same memo, even after a fresh check", async () => {
+  const r = stubRemesso();
+  const assay = stubAssay();
+  const g = withAssay(r, { assay, memo: true, cacheMs: 0 });
+  const input = { to: GOOD, amount: "1", idempotencyKey: "retry" };
+  await g.pay(input);
+  verdicts[GOOD].rating = "AA"; // the rating moved between the attempt and its retry
+  try {
+    await g.pay(input);
+  } finally {
+    verdicts[GOOD].rating = "A";
+  }
+  assert.equal(assay.calls.length, 2);
+  assert.equal(r.paid[0].input.memo, r.paid[1].input.memo);
+});
+
+test("onDecision gets the signed score with the payment's idempotencyKey", async () => {
+  const seen = [];
+  const g = withAssay(stubRemesso(), { assay: stubAssay(), onDecision: (d) => seen.push(d) });
+  await g.pay({ to: GOOD, amount: "1", idempotencyKey: "proof" });
+  assert.equal(seen[0].idempotencyKey, "proof");
+  assert.match(seen[0].result.attestation.signature, /^0x/);
 });
 
 test("the caller's own memo is kept", async () => {
@@ -124,8 +176,44 @@ test("when Assay is unreachable the default is to not pay", async () => {
   assert.equal(r.paid.length, 1);
 });
 
+test("invoices and schedules are paid once they pass", async () => {
+  const r = stubRemesso();
+  const g = withAssay(r, { assay: stubAssay() });
+  await g.invoices.pay({ message: { recipient: GOOD, orderId: "o2" } }, { funding: "wallet" });
+  await g.schedules.create({ to: GOOD, amount: "1", token: "USAT", every: "week" });
+  assert.deepEqual(r.paid.map((p) => p.via), ["invoices.pay", "schedules.create"]);
+});
+
 test("everything Remesso has that pays nobody is untouched", async () => {
   const g = withAssay(stubRemesso(), { assay: stubAssay() });
   assert.equal(await g.remittances.quote(), "quote");
+  assert.equal(await g.invoices.verify(), "verified");
   assert.equal(g.address, "0xme");
+});
+
+// Against the real remesso-sdk: it must get past Remesso's own memo rules. With no account the
+// SDK stops later (it has nobody to sign with), which shows the wrapper's input was accepted.
+import { createRemesso } from "remesso-sdk";
+
+async function sdkError(fn) {
+  try {
+    await fn();
+  } catch (err) {
+    return err;
+  }
+  return null;
+}
+
+test("real SDK: wallet and request payments are not refused for a memo", async () => {
+  for (const memo of [false, true]) {
+    const g = withAssay(createRemesso(), { assay: stubAssay(), memo });
+    const wallet = await sdkError(() =>
+      g.remittances.send({ to: GOOD, amount: "1", token: "USDT", funding: "wallet", idempotencyKey: "w1" }));
+    const request = await sdkError(() =>
+      g.remittances.send({ to: GOOD, amount: "1", token: "USDT", funding: "policy", requestId: "00000000-0000-4000-8000-000000000000", idempotencyKey: "w2" }));
+    for (const err of [wallet, request]) {
+      assert.ok(err, "the SDK should stop without an account");
+      assert.doesNotMatch(err.message, /memo/, `memo=${memo}: ${err.message}`);
+    }
+  }
 });
