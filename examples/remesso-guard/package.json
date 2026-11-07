@@ -8,10 +8,10 @@
     "test": "node --test"
   },
   "dependencies": {
-    "assayscore": "0.5.0",
-    "remesso-sdk": "0.3.1",
-    "viem": "2.57.16",
-    "@x402/fetch": "2.30.0",
-    "@x402/evm": "2.30.0"
+    "@x402/evm": "^2.30.0",
+    "@x402/fetch": "^2.30.0",
+    "assayscore": "^0.5.0",
+    "remesso-sdk": "^0.3.1",
+    "viem": "^2.57.16"
   }
 }
