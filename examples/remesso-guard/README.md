@@ -2,62 +2,100 @@
 
 [Remesso](https://docs.remesso.xyz) lets an agent pay any address within caps a person signs onchain. [Assay](https://assayscore.xyz) checks who is on the other end before the money moves: is this seller's revenue real, or self-funded and going round in loops?
 
-`withAssay` wraps a Remesso client and keeps its API. Every paying call checks the recipient first:
+`withAssay` wraps a Remesso client (remesso-sdk 0.3.1) and keeps its API. Each new payment checks its recipient first, and a recipient Assay does not clear is never paid.
+
+Copy [`guard.mjs`](guard.mjs) into your project (it is not published on npm), then:
 
 ```js
 import { createRemesso } from "remesso-sdk";
+import { safeFetchText } from "remesso-sdk/node";
 import { createAssay, preferAssets } from "assayscore";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
 import { withAssay, RecipientBlockedError } from "./guard.mjs";
+
+const account = privateKeyToAccount(process.env.AGENT_KEY);
 
 // Pay Assay in USA₮ over x402: $0.002 a check, with a score signed by Assay.
 const x402 = new x402Client(preferAssets("USAT")).register("eip155:42220", new ExactEvmScheme(account));
 const assay = createAssay({ payingFetch: wrapFetchWithPayment(fetch, x402) });
 
-const remesso = withAssay(createRemesso({ account }), { assay });
+const remesso = withAssay(createRemesso({ account, fetchText: safeFetchText }), { assay });
 
 try {
-  await remesso.agents.pay(agentId, { funding: "policy", amount: "5", token: "USAT", idempotencyKey });
+  await remesso.agents.pay(agentId, { funding: "policy", amount: "5", token: "USAT", idempotencyKey: "order-42" });
 } catch (err) {
-  if (err instanceof RecipientBlockedError) console.log(err.result.reasons); // never paid
+  if (err instanceof RecipientBlockedError) console.log(err.result.reasons); // not paid
 }
 ```
 
-## What it does
+## What is checked
 
-- **Guards every path that pays:** `pay`, `remittances.send`, `agents.pay`, `requests.pay`, `invoices.pay` and `schedules.create` (a schedule is checked once, when it's created). Everything else on the client is untouched.
-- **Pins the wallet it checked.** `agents.pay` resolves the agent's ERC-8004 wallet, checks it, and passes it to Remesso as `expectedWallet`. If the wallet changes between the check and the payment, the payment fails.
-- **Leaves your payment as it is.** Apart from pinning the wallet in `agents.pay`, the wrapper never changes what you send, so Remesso's own rules apply unchanged. Each decision goes to `onDecision` with Assay's signed score and the payment's `idempotencyKey`, so you can store the proof next to the payment record.
-- **Optional memo.** With `memo: true`, a policy payment that has no memo and answers no request carries `assay pass A`. Wallet payments and request payments are left alone, because Remesso refuses a memo on those. A key keeps the memo it was first sent with, so a retry under the same `idempotencyKey` matches it.
-- **Is cheap.** Verdicts are cached for 10 minutes, and concurrent checks of one address share a single call.
-- **Sensible defaults.** Only a `block` verdict stops a payment unless you set `minRating` (for example `"BB"`). `allowUnrated` (default `true`) decides whether brand-new addresses can be paid. If Assay can't be reached, nothing is paid unless you set `onAssayError: "allow"`.
-- **Has a free mode.** Without a paying fetch it uses Assay's free check: the same verdict, unsigned.
+| Call | Address checked |
+|---|---|
+| `pay`, `remittances.send` | `to` |
+| `agents.pay` | the agent's registered wallet, passed to Remesso as `expectedWallet` |
+| `requests.pay` | the request's `requested.to` |
+| `invoices.pay` | the invoice's recipient, after Remesso verifies the invoice |
+| `schedules.create` | `to`, or the answered request's `requested.to`, passed to Remesso as `to` |
+
+**Not checked:** later runs of a schedule (checked once, when it is created), `schedules.setActive` and `setTrigger`, `remittances.reconcile` and `recoverPending`, and payments made by other clients or agents, for example through a policy you create. These finish or repeat payments to a recipient that was fixed earlier. Tools from `createAgentTools` are guarded only if you build them from the wrapped client.
+
+## Guarantees
+
+- **It checks the address Remesso will actually pay.** It reads addresses exactly as Remesso does: with viem's `getAddress`, a peer dependency the two share. So input such as `expectedWallet: null` or an address passed as a `String` object can't slip past the check.
+- **It sends nothing Remesso wouldn't send unwrapped.** It changes no payment term. It only pins the address it checked: `expectedWallet` on `agents.pay`, and `to` on a schedule that answers a request. Remesso then refuses the payment if that address changes after the check.
+- **It fails closed.** If Assay can't answer, or a lookup it needs fails, nothing is paid. Nothing goes to Remesso unchecked because something failed. Set `onAssayError: "allow"` to pay when Assay is down.
+- **It uses Remesso's errors.** `RecipientBlockedError` is a `RemessoError` with code `refused`. An Assay failure is code `http`, and a slow Assay is code `timeout` (15 s by default).
+- **It avoids paying for checks Remesso would refuse anyway.** Input Remesso refuses on its face (no funding, no key, an invalid address, an invalid or long-expired invoice) goes straight to Remesso. The common refusals that depend on what Remesso reads (no wallet, no payment profile, a required reference, a request that can't be paid) are thrown first, with Remesso's own code. A slow check keeps running after a payment stops waiting, so a retry reuses its answer rather than buying a second one.
+- **It checks every call, retries included.** It keeps no state per idempotency key. To resume a payment that already started, use the unwrapped client, for example `remittances.reconcile`: it can only finish a payment that was checked when it began. A refusal here never means an earlier attempt was unpaid.
+- **It doesn't change behavior by accident.** It has no memo option, because adding a memo would change Remesso's repeat detection for payments sent without a key. `onDecision` is for logs, and an error it throws is ignored.
+
+## Options
+
+| Option | Default | |
+|---|---|---|
+| `paid` | `true` | The paid check: a score signed by Assay, $0.002 per uncached address. It needs `createAssay({ payingFetch })` and throws without one. `false` uses the free check: the same verdict, unsigned. |
+| `minRating` | none | The lowest rating to pay, for example `"BB"`. Without it, only a `block` verdict stops a payment. |
+| `allowUnrated` | `true`, or `false` with `minRating` | Whether to pay an address too new to rate (`NR`). |
+| `cacheMs` / `maxCached` | 10 min / 5000 | Reuse a verdict per address. Concurrent checks of one address share one call. |
+| `timeoutMs` | 15000 | Give up on Assay after this long. |
+| `onAssayError` | `"block"` | What to do when Assay can't answer. |
+| `onDecision` | none | Called with every decision and Assay's result (with `attestation` in paid mode). |
+
+## Known limits
+
+- **`requests.pay` reads the request twice.** The guard reads it, then Remesso reads it again, and Remesso can't be told which address to expect. If Remesso's backend changed a request's `requested.to` between those two reads, the new address would be paid unchecked.
+- **Some refusals come after the check.** Remesso refuses some payments only after the check has run: no account, over the policy's caps, or not enough balance. The $0.002 check is still spent on those.
+- **The signed score isn't verified locally.** The guard doesn't check the signature on the score Assay returns. Verify it with the AssayRegistry contract, or Assay's `verify` command, if you store it as proof.
+
+## Where it fits
+
+Assay rates addresses that earn: x402 sellers, ERC-8004 agents and services. That makes the guard useful for an agent spending a budget on services, and for paying other agents. **A personal wallet with no x402 revenue is always rated `NR`, so with the defaults the guard never stops a remittance to a person.** If you set `minRating` or `allowUnrated: false`, the guard refuses them instead.
 
 ## Try it
 
 ```sh
 npm install
-node demo.mjs 9981            # an ERC-8004 agent id, resolved with Remesso's own agents.find
-node demo.mjs 0x5df8ae2b963165b735b18ca86b1ea448d2aa032c --quote   # an address; --quote shows the USA₮ price of the paid check
-npm test                      # 13 tests, some against the real remesso-sdk: nothing is paid
+node demo.mjs 9981                                            # an ERC-8004 agent id, resolved with Remesso's agents.find
+node demo.mjs 0x5df8ae2b963165b735b18ca86b1ea448d2aa032c --quote   # --quote shows the USA₮ price of the paid check
+npm test                                                      # 28 tests, some against the real remesso-sdk; nothing is paid
 ```
 
-The demo never pays anyone. Set `ASSAY_PAYER_KEY` (a wallet holding a little USA₮) to make the check the paid, signed one: it costs $0.002.
+Without `ASSAY_PAYER_KEY` the demo uses the free check and pays nothing. With it (a wallet holding a little USA₮), each check pays Assay $0.002. The demo never pays the recipient.
 
-Real output, 7 Nov 2026. Agent #9981 is Assay's own agent, which Assay rates D by its own rules:
+Output on 7 Nov 2026. Agent #9981 is Assay's own agent, which Assay rates D by its own rules:
 
 ```
-ERC-8004 agent #9981: wallet 0x3d5ea1ce6f3Fa5FAe7A38b77F569570b3ea9a9a4
-paid check: HTTP 402, 0.002 Tether America USD to 0x3d5e…a9a4 on eip155:42220
+ERC-8004 agent #9981: wallet 0x3d5ea1ce6f3Fa5FAe7A38b77F569570b3ea9a9a4 (its registration file is remote: pass fetchText (safeFetchText from remesso-sdk/node) to read it)
 Assay: block, rated D, 14% organic
   - Early payments from wallets it funded
   - Only 14% of revenue is organic
+free check (unsigned); set ASSAY_PAYER_KEY for the signed one
 would NOT pay: RecipientBlockedError
 ```
 
-## Where it fits
-
-Assay rates addresses that earn: x402 sellers, ERC-8004 agents and services. That makes it most useful for an agent spending a budget on services, and for agent-to-agent payments. A personal wallet receiving a remittance has no revenue to test, so Assay rates it `NR` (too little history), and `allowUnrated` decides what happens.
+Requires Node 20 or later. MIT, like Assay and remesso-sdk.
 
 Docs: [assayscore.xyz/docs](https://assayscore.xyz/docs) · [API](https://github.com/Oshioke-Salaki/assay/blob/main/docs/API.md) · [how scores are made](https://github.com/Oshioke-Salaki/assay/blob/main/docs/METHODOLOGY.md)
