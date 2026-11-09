@@ -176,37 +176,83 @@ export function isPrivateHost(host: string): boolean {
   )
     return true;
   if (!h.includes(".") && !h.includes(":")) return true;
-  if (/^\[?[0-9a-f:]+\]?$/i.test(h) && h.includes(":")) return isPrivateIp(h.replace(/^\[|\]$/g, ""));
+  if (/^\[?[0-9a-f:.]+\]?$/i.test(h) && h.includes(":")) return isPrivateIp(h);
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return isPrivateIp(h);
   return false;
 }
 
-export function isPrivateIp(ip: string): boolean {
-  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 192 && b === 0) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
-    );
+/** The four octets of a dotted IPv4 address, or null. */
+function ipv4Octets(ip: string): number[] | null {
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return null;
+  const o = m.slice(1).map(Number);
+  return o.every((n) => n <= 255) ? o : null;
+}
+
+/** The eight 16-bit groups of an IPv6 address (with "::" and a dotted IPv4 tail expanded), or null. */
+function ipv6Groups(ip: string): number[] | null {
+  let s = ip.toLowerCase().replace(/%.*$/, ""); // drop a zone id
+  const tail = s.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (tail) {
+    const o = ipv4Octets(tail[2]!);
+    if (!o) return null;
+    s = `${tail[1]}${((o[0]! << 8) | o[1]!).toString(16)}:${((o[2]! << 8) | o[3]!).toString(16)}`;
   }
-  const v6 = ip.toLowerCase();
-  if (v6 === "::1" || v6 === "::") return true;
-  if (v6.startsWith("::ffff:")) return isPrivateIp(v6.slice(7));
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const part = (x: string) => (x === "" ? [] : x.split(":"));
+  const head = part(halves[0]!);
+  const rest = halves.length === 2 ? part(halves[1]!) : [];
+  const fill = 8 - head.length - rest.length;
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return null;
+  const all = [...head, ...Array(halves.length === 2 ? fill : 0).fill("0"), ...rest];
+  if (all.length !== 8 || !all.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return all.map((g) => Number.parseInt(g, 16));
+}
+
+function privateV4([a, b, c]: number[]): boolean {
   return (
-    v6.startsWith("fc") ||
-    v6.startsWith("fd") ||
-    v6.startsWith("fe80") ||
-    v6.startsWith("fe9") ||
-    v6.startsWith("fea") ||
-    v6.startsWith("feb")
+    a === 0 || // "this network"
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b! >= 64 && b! <= 127) || // carrier-grade NAT
+    (a === 169 && b === 254) || // link-local, cloud metadata
+    (a === 172 && b! >= 16 && b! <= 31) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) || // IETF assignments, TEST-NET-1
+    (a === 192 && b === 88 && c === 99) || // 6to4 relay anycast
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) || // benchmarking
+    (a === 198 && b === 51 && c === 100) || // TEST-NET-2
+    (a === 203 && b === 0 && c === 113) || // TEST-NET-3
+    a! >= 224 // multicast, reserved, broadcast
+  );
+}
+
+/**
+ * True for any address a server must not be pointed at: loopback, private, link-local, CGNAT,
+ * documentation, multicast and unspecified ranges, in IPv4 or IPv6 form, including IPv4 addresses
+ * written inside IPv6 (IPv4-mapped ::ffff:7f00:1, IPv4-compatible, NAT64 64:ff9b::/96, 6to4
+ * 2002::/16). Anything that does not parse as an IP address is treated as private.
+ */
+export function isPrivateIp(ip: string): boolean {
+  const host = ip.replace(/^\[|\]$/g, "");
+  const v4 = ipv4Octets(host);
+  if (v4) return privateV4(v4);
+  const g = ipv6Groups(host);
+  if (!g) return true;
+  const embedded = (hi: number, lo: number) => privateV4([hi >> 8, hi & 255, lo >> 8, lo & 255]);
+  if (g.slice(0, 5).every((x) => x === 0)) {
+    if (g[5] === 0xffff) return embedded(g[6]!, g[7]!); // ::ffff:a.b.c.d
+    if (g[5] === 0) return g[6] === 0 && g[7]! <= 1 ? true : embedded(g[6]!, g[7]!); // ::, ::1, ::a.b.c.d
+  }
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return embedded(g[6]!, g[7]!);
+  if (g[0] === 0x2002) return embedded(g[1]!, g[2]!); // 6to4 carries an IPv4 address
+  return (
+    (g[0]! & 0xfe00) === 0xfc00 || // unique local fc00::/7
+    (g[0]! & 0xffc0) === 0xfe80 || // link-local fe80::/10
+    (g[0]! & 0xffc0) === 0xfec0 || // site-local fec0::/10 (deprecated)
+    (g[0]! & 0xff00) === 0xff00 || // multicast
+    (g[0] === 0x2001 && g[1] === 0x0db8) || // documentation
+    (g[0] === 0x0100 && g.slice(1, 4).every((x) => x === 0)) // discard-only 100::/64
   );
 }

@@ -1,5 +1,6 @@
 import type { PublicClient } from "viem";
 import { verifyMessage } from "viem";
+import type { DB } from "../db.js";
 
 /** Ten minutes: long enough to sign, short enough that a captured signature is worthless later. */
 export const SIGNED_TTL = 10 * 60;
@@ -38,3 +39,31 @@ export async function verifySigned(
   }
   return false;
 }
+
+/**
+ * Accept a signed owner action (a claim, a reply, free alerts) only if it is newer than the last
+ * one accepted for the same address and kind, and record it. A message replayed as-is (same
+ * issuedAt and nonce) or an older one (rolling a newer update back) is refused. Synchronous, so the
+ * check and the write cannot be interleaved with another request: call it after the signature
+ * has been verified and right before the change it authorises.
+ */
+export function acceptSigned(
+  db: DB,
+  a: { address: string; kind: string; issuedAt: number; nonce: string },
+  now = Math.floor(Date.now() / 1000),
+): boolean {
+  const address = a.address.toLowerCase();
+  const last = db
+    .prepare("SELECT issued_at, nonce FROM signed_actions WHERE address = ? AND kind = ?")
+    .get(address, a.kind) as { issued_at: number; nonce: string } | undefined;
+  if (last && (a.issuedAt < last.issued_at || (a.issuedAt === last.issued_at && a.nonce === last.nonce)))
+    return false;
+  db.prepare(
+    `INSERT INTO signed_actions (address, kind, issued_at, nonce, accepted_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (address, kind) DO UPDATE SET issued_at = excluded.issued_at, nonce = excluded.nonce,
+       accepted_at = excluded.accepted_at`,
+  ).run(address, a.kind, a.issuedAt, a.nonce, now);
+  return true;
+}
+
+export const REPLAYED = "This signed message was already used, or a newer one replaced it. Sign a new one.";

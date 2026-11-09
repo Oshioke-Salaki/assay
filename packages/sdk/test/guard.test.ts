@@ -6,8 +6,10 @@ type FetchInput = Parameters<typeof fetch>[0];
 import {
   AssayBlockedError,
   AssayError,
+  assayGuardClient,
   createAssay,
   DEFAULT_BASE_URL,
+  isAssayBlocked,
   preferAssets,
   readPayTos,
   withAssayGuard,
@@ -197,5 +199,66 @@ describe("preferAssets", () => {
   it("falls back to the server's first option", () => {
     expect(preferAssets("wCOP")(2, reqs)).toBe(reqs[0]);
     expect(() => preferAssets("USDC")(2, [])).toThrow(/no way to pay/);
+  });
+});
+
+describe("audit of 7 Nov 2026", () => {
+  const assayWith = (checkValue: unknown) =>
+    ({ address: async () => ({ check: checkValue }) }) as unknown as ReturnType<typeof createAssay>;
+  const paidSpy = () => {
+    const calls: string[] = [];
+    return {
+      calls,
+      fetch: (async () => {
+        calls.push("paid");
+        return new Response("ok");
+      }) as unknown as typeof fetch,
+    };
+  };
+
+  it("treats a malformed, unknown or mismatched verdict as Assay being unable to answer", async () => {
+    for (const bad of [
+      null,
+      { verdict: "BLOCK", rating: "A" },
+      { verdict: "pass", rating: "bogus" },
+      check(WASH, "pass", "A"),
+    ]) {
+      const paid = paidSpy();
+      const guarded = withAssayGuard(async () => paymentRequired([SELLER]), paid.fetch, {
+        assay: assayWith(bad),
+        onAssayError: "block",
+      });
+      await expect(guarded("https://seller.example/api")).rejects.toThrow(/no valid verdict/);
+      expect(paid.calls).toEqual([]);
+    }
+  });
+
+  it("a 402 with no payTo is refused when failing closed", async () => {
+    const paid = paidSpy();
+    const guarded = withAssayGuard(async () => paymentRequired([]), paid.fetch, {
+      assay: assayWith(check(SELLER, "pass", "A")),
+      onAssayError: "block",
+    });
+    await expect(guarded("https://seller.example/api")).rejects.toThrow(/no payTo/);
+    expect(paid.calls).toEqual([]);
+  });
+
+  it("assayGuardClient checks the requirement it is about to sign", async () => {
+    let hook!: (c: { selectedRequirements: { network: string; payTo: string } }) => Promise<unknown>;
+    assayGuardClient(
+      { onBeforePaymentCreation: (h) => (hook = h as typeof hook) },
+      {
+        assay: assayWith(check(WASH, "block", "D")),
+      },
+    );
+    const err = (await hook({ selectedRequirements: { network: "eip155:42220", payTo: WASH } }).catch(
+      (e) => e,
+    )) as Error;
+    expect(err).toBeInstanceOf(AssayBlockedError);
+    expect(isAssayBlocked(err)).toBe(true);
+    expect(isAssayBlocked(new Error(`Failed to create payment payload: ${err.message}`))).toBe(true);
+    await expect(hook({ selectedRequirements: { network: "eip155:1", payTo: WASH } })).rejects.toThrow(
+      /Celo mainnet only/,
+    );
   });
 });

@@ -7,7 +7,7 @@ Assay reads every x402 settlement on Celo mainnet and tests each seller's revenu
 Across all 858,007 x402 settlements on Celo mainnet ($192,170), Assay finds that **only 21% is organic**. $123,578 was paid by wallets the sellers funded themselves, and $28,870 went round in 9 payment loops, the largest 378 wallets paying each other. Of 660 sellers, 138 are rated D.
 
 - **People** read reports in the browser for free.
-- **Agents** pay $0.002 per check over x402 in USD₮ (or USDC, USA₮, wARS, wBRL, wCOP), or put `withAssayGuard` (`npm install assayscore`) in front of their own x402 client so a blocked seller is never paid.
+- **Agents** pay $0.002 per check over x402 in USD₮ (or USDC, USA₮, wARS, wBRL, wCOP), or add `assayGuardClient` (`npm install assayscore`) to their own x402 client, so it never signs a payment to a seller Assay blocks.
 - **Contracts** gate on `AssayRegistry.isInvestmentGrade(seller)`.
 
 Alongside the ledger, Assay searches X for every seller's exact address, paid per search through buy, and shows the posts that name it, warnings first. The posts are evidence for the reader and never move a score, because anyone can post about anyone.
@@ -19,7 +19,7 @@ Alongside the ledger, Assay searches X for every seller's exact address, paid pe
 | `packages/core` | The scoring engine: payment graph, loop detection (Tarjan SCC), funding trace, ratings, verdicts, attestation format. Pure TypeScript, no I/O. |
 | `apps/server` | Indexer (SQD Portal, finalized blocks), enrichment (first funders from an SQD log scan, Self Agent ID, ERC-8004 cards), the HTTP API with paid x402 routes, and the operator CLI. SQLite. |
 | `apps/web` | The site: landing, economy, address reports, agents directory, payment-verified reviews, docs. Next.js 16. |
-| `packages/sdk` | `createAssay` client and `withAssayGuard`, a drop-in guard for any x402 fetch. |
+| `packages/sdk` | `createAssay` client, `assayGuardClient` (checks the seller inside an x402 client before it signs) and `withAssayGuard` (checks before the paid request). |
 | `packages/mcp` | MCP server with four read-only tools for any agent. |
 | `contracts` | `AssayRegistry.sol`: verifies and stores signed scores onchain. Foundry. |
 | `docs` | Architecture, methodology, API, business model and scaling, deployment, hackathon notes. |
@@ -44,7 +44,7 @@ cd contracts && forge test     # AssayRegistry, including a signature made by th
 
 ## Docs
 
-- [Trust model](docs/TRUST.md): what is onchain, what is not, how to verify any signed score from your own node (`pnpm --filter @assay/server verify`), and the outside audit of 30 Oct 2026 (five findings, all fixed).
+- [Trust model](docs/TRUST.md): what is onchain, what is not, how to verify any signed score from your own node (`pnpm --filter @assay/server verify`), and both automated audits: the method on 30 Oct 2026 (five findings, all fixed) and the whole repository on 7 Nov 2026 (twelve findings: ten fixed in full, one in part, one a documented limit of Remesso's SDK).
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Methodology](docs/METHODOLOGY.md)

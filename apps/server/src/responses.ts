@@ -1,7 +1,7 @@
 import { type ResponseFields, responseMessage, validateResponse } from "assayscore-core";
 import type { PublicClient } from "viem";
 import type { DB } from "./db.js";
-import { signedShape, verifySigned } from "./lib/signed.js";
+import { acceptSigned, REPLAYED, signedShape, verifySigned } from "./lib/signed.js";
 
 /** The seller's own words under one finding, dated. Never part of a score. */
 export interface FindingResponse {
@@ -21,7 +21,7 @@ export function readResponses(db: DB, address: string): Record<string, FindingRe
 export type ResponseOutcome =
   | { ok: true; action: "respond"; code: string; response: FindingResponse }
   | { ok: true; action: "withdraw"; code: string }
-  | { ok: false; status: 400 | 401; error: string };
+  | { ok: false; status: 400 | 401 | 409; error: string };
 
 export async function applyResponse(
   db: DB,
@@ -37,6 +37,14 @@ export async function applyResponse(
   const signature = String(input.signature);
   if (!(await verifySigned(f.address, responseMessage(f), signature, opts.rpc)))
     return { ok: false, status: 401, error: "The signature does not match this address." };
+  if (
+    !acceptSigned(
+      db,
+      { address: f.address, kind: `response:${f.code}`, issuedAt: f.issuedAt, nonce: f.nonce },
+      now,
+    )
+  )
+    return { ok: false, status: 409, error: REPLAYED };
   if (f.action === "withdraw") {
     db.prepare("DELETE FROM flag_responses WHERE address = ? AND code = ?").run(f.address, f.code);
     return { ok: true, action: "withdraw", code: f.code };

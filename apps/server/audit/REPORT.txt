@@ -1,0 +1,452 @@
+ASSAY + REMESSO SECURITY AND CORRECTNESS AUDIT
+7 November 2026
+
+Audited local revision: fb878f9 (main, "Remesso example: audit fixes (v4)").
+SDK and MCP package versions: 0.5.0. Remesso dependency: 0.3.1.
+
+RESULT
+
+12 findings: 4 high priority and 8 medium priority. No critical issue or
+unauthorized contract-level transfer was demonstrated. Several findings depend
+on deployment conditions or upstream behavior, specified below. One Remesso
+limitation was already documented; it remains relevant to the promised guarantee.
+
+The highest-priority work is binding the guard to the actual payment payload,
+repairing outbound URL protections, reserving spend before handing out payment
+authorizations, and delaying durable paid-service effects until settlement.
+
+This is an application source audit with local adversarial tests, not a claim
+that the live service is compromised or that every possible vulnerability has
+been found. No real funds were moved, no production attack was performed, and
+no application fixes were applied. Audit evidence is added in this directory.
+
+SCOPE AND EVIDENCE
+
+Reviewed the HTTP API and its payment middleware integration, owner signatures,
+webhooks, remote metadata fetching, indexing and scoring boundaries, score
+signing/verification, AssayRegistry, SDK payment guard, Remesso wrapper, MCP
+stdio transport, and web proxy/wallet flows. Also checked dependency advisories,
+tracked text for credential-shaped material without exposing secret values,
+typechecking, production build, and existing tests.
+
+The supplied GitHub/npm/site URLs could not be retrieved with the web reader.
+Findings refer to this local revision; remote branch/deployment and npm tarball
+equivalence were not verified. Installed x402 and Remesso code was inspected.
+Live wallet transaction flows and browser extension behavior were not exercised.
+Vendored OpenZeppelin/forge-std were not independently re-audited.
+
+The supplied outreach text is stale relative to this checkout: the wrapper now
+has 28 tests, guards invoices and schedule creation, and deliberately adds no
+memo. It cannot currently promise the verdict/signature hash is in the onchain
+memo. This audit does not establish permission to name Remesso as a customer.
+
+Reproduce from the repository root:
+  pnpm --filter assayscore-core build
+  pnpm --filter @assay/server build
+  pnpm --filter @assay/server exec vitest run audit/security-repro.test.ts
+
+Install the separate examples/remesso-guard dependencies first if absent.
+The 15 assertions prove existing defective behavior. Passing means the issue
+was reproduced, not that it was fixed. Reverse the assertions when implementing
+regression tests. All transport mocks and keys in them are local test fixtures.
+
+F01 — HIGH: SDK checks one payment challenge but signs a different one
+
+Location: packages/sdk/src/index.ts:359-378.
+
+withAssayGuard sends an unpaid request, checks the payTo addresses in that
+response, then invokes payingFetch on the original URL. wrapFetchWithPayment
+starts another request and signs whatever challenge that second response
+contains. Nothing binds its recipient to the one just checked.
+
+A malicious seller returns an acceptable wallet A for the guard's probe and a
+blocked wallet B for the paying client's request. The same endpoint can switch
+requirements based on request count; no interception of the Assay API is needed.
+onAssayError:"block" does not prevent this.
+
+Evidence: F01 uses the installed x402 client and real local EIP-3009 signing.
+Only A is checked, while the authorization transmitted to the mock seller names
+B. No payment is settled. The guard also discards network information and
+passes challenges without parseable payTo addresses to payingFetch unchecked.
+
+Fix: enforce the check inside the payment client's before-signing hook against
+the exact selected requirements. Bind network, recipient, and relevant payment
+terms; reject unsupported networks and malformed challenges. Recheck every new
+challenge or payment retry. An arbitrary payingFetch is opaque, so an external
+probe alone cannot provide this guarantee.
+
+F02 — HIGH: outbound URL protection has DNS and IPv6 bypasses
+
+Locations: apps/server/src/lib/http.ts:45-93;
+apps/server/src/alerts.ts:347-369; packages/core/src/claim.ts:184-210.
+
+Both metadata fetching and webhook delivery resolve the hostname and check
+the results, but then fetch the original URL using the default resolver. The
+validated addresses are not pinned to the connection. An attacker-controlled
+DNS zone can answer publicly during validation and privately during connection.
+Checking again on every delivery does not close this gap.
+
+Both isPrivateIp implementations also classify canonical mapped IPv6 such as
+::ffff:7f00:1 (127.0.0.1), ::ffff:a00:1 (10.0.0.1), and
+::ffff:a9fe:a9fe (169.254.169.254) as public: they recurse on the hexadecimal
+tail as though it were dotted IPv4. The duplicate classifiers differ in other
+reserved/link-local ranges too.
+
+Impact: a public agent registration URL or webhook URL can bypass the intended
+network boundary. HTTPS certificate validation still applies: this does NOT
+prove arbitrary HTTP metadata-service access, TLS bypass, or secret extraction.
+Reachability and a target's valid TLS configuration determine full impact.
+
+Evidence: two F02 tests show mapped-IP misclassification and that the validated
+lookup result is not supplied to fetch. No live DNS-rebinding attack was run.
+
+Fix: use one well-tested IP parser and a connector that validates the actual
+resolved destination and connects to that address, retaining correct TLS SNI
+and certificate verification. Normalize mapped IPv6, reject all non-public
+ranges, disallow redirects or revalidate each hop, and bound DNS lookup time.
+
+F03 — MEDIUM: remote response bodies can hang past the advertised timeout
+
+Location: apps/server/src/lib/http.ts:34-41, 98-110.
+Related implementation: apps/server/src/indexer/sqd.ts:83-107.
+
+fetch resolves when response headers arrive. fetchWithTimeout immediately
+clears its abort timer, before fetchUntrusted reads the body. An agent URI
+server can send headers promptly and drip a small body indefinitely, below
+maxBytes. AgentCards.batch awaits entries sequentially, so one malicious card
+can stall metadata and link-refresh work for every subsequent card. SQD has
+the same timer lifecycle around its later NDJSON read, although that upstream
+has a different trust level.
+
+Evidence: F03 returns headers with an unfinished stream, advances 100 times
+the configured timeout, and observes that its abort signal is still live.
+
+Fix: keep cancellation active through complete body consumption; impose total
+and inactivity deadlines, cancel readers on errors/oversized responses, and
+bound DNS work. Preserve or combine caller abort signals.
+
+F04 — MEDIUM: signed owner actions can be replayed or rolled back
+
+Locations: apps/server/src/api/app.ts:342-375;
+apps/server/src/alerts.ts:140-149; apps/server/src/claims.ts:104-125;
+apps/server/src/responses.ts:38-49.
+
+Messages contain a nonce, but the server never consumes it. The ten-minute
+timestamp window only limits how long replay is possible. Reusing one owner
+watch signature repeatedly adds another ninety days each time. An older claim
+or response can also overwrite a newer update; replaying a release/withdrawal
+can remove a later update. Neither nonce uniqueness nor issued_at ordering
+is enforced at the write boundary.
+
+Evidence: F04 submits one signed watch message twice and adds 180 days; a
+second test applies old/new/old signed claims and restores the old name.
+The claim rollback requires access to an old signed payload; anyone can
+repeat their own watch signature without that additional prerequisite.
+
+Fix: transactionally consume a unique (address, action/domain, nonce) and
+return the original outcome for a duplicate. Store ordering/tombstone state
+after deletion and reject superseded messages. Prevent concurrent requests
+from both consuming one nonce.
+
+F05 — HIGH: daily spend caps ignore issued authorizations without receipts
+
+Location: apps/server/src/lib/buy.ts:74-85, 94-129.
+
+The budget counts only rows with a returned transaction hash. Once a signed
+authorization reaches a service, that service may settle it even if it omits
+the receipt header or the response is lost. Those attempts are recorded with
+zero spend, so another authorization is allowed immediately.
+
+Evidence: F05 sets the cap and per-call cost to $0.005, then generates and
+delivers three distinct payment payloads. The ledger still records zero spend.
+The fixture demonstrates authorizations beyond the cap, not actual transfers.
+Exploitation requires a withholding service or ambiguous network failures.
+
+The five-minute chain reconciliation is useful accounting, but cannot prevent
+overspend before it runs. It is also scoped to the configured gateway/token;
+it is not a conservative reservation for every authorization handed out.
+
+Fix: reserve the maximum authorized amount transactionally before signing or
+sending it. Count pending/unknown attempts against the cap. Release a reservation
+only after proving it cannot settle, or reconcile it to confirmed spend.
+Keep reservations durable across restarts and shared across paying workers.
+
+F06 — MEDIUM: verification lets the input choose its own trust anchor
+
+Locations: apps/server/src/scripts/verify.ts:70-81;
+apps/server/src/verify.ts:224-281.
+
+Unless REGISTRY_ADDRESS is configured, the CLI uses the verifyingContract from
+the submitted file, calls that contract's attester(), and treats its answer as
+the trusted signer. An attacker can provide a contract naming their own key and
+sign a numerically correct score. The CLI then announces "the signature is
+Assay's" and exits successfully. Matching recomputed fields proves arithmetic,
+but does not establish Assay's authorship.
+
+Separately, verifyScore can return outcome:"verified" when no signature was
+checked and no expected signer was supplied. The CLI rejects unsigned files,
+so that second issue affects direct callers of the helper, not the CLI path.
+
+Evidence: one F06 test runs the actual built CLI with a locally signed file and
+an in-memory RPC response modeling the attacker's registry. It exits zero with
+the Assay-authorship claim. The other reproduces the unsigned helper result.
+This does not bypass the real deployed AssayRegistry's signature check.
+
+Fix: default to an independently trusted registry and require its address to
+match the file. Use an explicit operator option for other trust roots. Separate
+"computation matches" from "trusted signature verified" in results and exit
+codes. Require valid===true for an authenticity success.
+
+F07 — MEDIUM: direct deployments trust spoofable forwarding headers
+
+Location: apps/server/src/api/app.ts:978-987; consumers at rateLimit and /v1/admin.
+
+clientIp uses the last X-Forwarded-For entry from any request, regardless of
+whether its immediate peer is a trusted proxy. The documented standalone VPS
+setup listens publicly without an enforced proxy requirement. On that setup,
+rotating this header bypasses free-route limits and admin failed-key lockouts,
+and fabricates distinct usage callers. Header values are not even validated
+as IPs. It does not bypass the admin password itself.
+
+Evidence: F07 gets 200, then 429 at a one-request limit, then 200 by changing
+only X-Forwarded-For. This is a direct-app test. Exposure on Fly/Vercel depends
+on their ingress/header configuration and was not demonstrated live.
+
+Fix: use the socket peer unless it belongs to a configured trusted proxy;
+enforce proxy-only ingress when deployed that way, parse a bounded chain, and
+validate the selected address. Audit the web relays' trust assumptions too.
+
+F08 — MEDIUM: stale analysis can continue serving unusable attestations
+
+Locations: apps/server/src/analysis.ts:92-115, 125-128;
+apps/server/src/api/app.ts:560-563, 626-629; apps/server/src/attest.ts:52-54.
+
+Analysis refreshes only after invalidate(), not simply when its data gets old.
+If indexing/enrichment stop invalidating it, ctx.now remains the old timestamp.
+Paid routes keep signing that snapshot with expiresAt=ctx.now+7 days, with no
+freshness/expiry gate. After seven days a buyer can pay for an already-expired
+signature. Earlier in an outage they can receive old data without the paid
+verdict expressing index lag. The public status route exposes lag separately,
+but the SDK's check does not consult it.
+
+Evidence: F08 advances an existing snapshot by eight days without invalidation
+and obtains an attestation already past expiry. An outage or stalled worker is
+the prerequisite; this is not evidence the current deployment is stale.
+
+Fix: enforce freshness and availability of the indexed/enrichment data before
+charging or signing. Return 503 when required data is stale. Recompute temporal
+components on an age bound; merely updating issuedAt on old evidence is not a
+sufficient repair.
+
+F09 — MEDIUM: Remesso requests.pay has an unpinned second recipient read
+
+Location: examples/remesso-guard/guard.mjs:247-255.
+
+The guard obtains requests.get(id), approves requested.to, then calls the
+original requests.pay(id). Remesso reads the request again without a pinned
+expected recipient. If the backend returns a different destination between
+reads, it is paid without a corresponding Assay check.
+
+Evidence: F09 models the two reads returning A then B; only A is checked and
+B is forwarded to the mock payment operation. The wrapper README already
+acknowledges this limitation. Whether an external requester can cause this
+transition through the production backend was not established. The defect
+invalidates an unconditional guarantee even though normal immutable requests
+may not trigger it.
+
+Fix: add an expected-recipient/request-version contract to Remesso requests.pay
+and enforce it immediately before signing, or provide an immutable verified
+request object. Until then, document the backend immutability prerequisite or
+refuse this path when strict recipient binding is required.
+
+F10 — MEDIUM: malformed Assay data passes the SDK's strict guard mode
+
+Location: packages/sdk/src/index.ts:344-356, 374-378.
+
+The SDK casts JSON to a type without runtime validation. allowed() rejects only
+the exact verdict "block". Unknown ratings become undefined in RATING_CODES,
+so comparing them with minRating also fails to reject them. A missing/null
+check is explicitly treated as allowed. This is possible with a buggy or
+misconfigured Assay endpoint; a seller cannot directly alter a correctly
+secured Assay HTTPS response.
+
+Evidence: F10 returns {verdict:"BLOCK",rating:"bogus"} while minRating is BBB
+and onAssayError is block. The paying callback is still reached.
+
+Fix: validate the full result schema, allowed verdict/rating enums, subject
+address, and numerical fields before caching or making a decision. Treat null
+or invalid results as errors under the configured policy. Apply subject and
+attestation consistency checks to the Remesso wrapper as well.
+
+F11 — HIGH: paid effects survive failed inbound settlement
+
+Locations: apps/server/src/api/app.ts:596-604, 814;
+apps/server/src/api/paid.ts:227-280; apps/server/src/alerts.ts:140-187.
+
+Installed @x402/hono 2.28.0 runs the handler after payment verification and
+performs exact-payment settlement afterward. POST /v1/watch persists/renews an
+active watch and enqueues deliveries inside that handler. A failed settlement
+replaces the response with an error but does not reverse those writes. An
+existing subscriber's watch can therefore be extended even when that renewal
+never settles. Fresh X checks also buy an external search before the incoming
+payment is settled, leaving Assay to cover that cost on settlement failure.
+
+A verification success is not a settlement guarantee: concurrent authorizations
+or spending the balance in the intervening window can cause settlement failure.
+The exact feasibility of nonce-race abuse against the live facilitator is not
+assumed; the application has no compensating behavior for ordinary failure.
+
+Evidence: F11 uses real application middleware and handler code, with the
+verification/settlement boundary mocked to success/failure. The HTTP response
+is 402, yet both the active watch and its pending delivery exist in SQLite.
+The analogous fresh-search cost follows from the same ordering; it was not
+charged or tested against a live provider.
+
+Fix: stage watch changes, activate them only on confirmed settlement, and
+deduplicate payment attempts. Irreversible external purchases need settlement
+first, escrow/reservation, or an explicitly bounded loss/refund design. A DB
+rollback alone cannot refund an already-purchased X search.
+
+F12 — MEDIUM: browsers cannot authenticate watch status/cancellation
+
+Location: apps/server/src/api/app.ts:123-129, 607-624.
+
+The watch endpoints require x-assay-watch-secret, but the CORS allowHeaders
+list omits it. A browser accessing the API from an otherwise allowed web
+origin fails its preflight before it can GET the watch or DELETE it. The
+cross-origin SDK watch management calls are affected; Node clients are not.
+
+Evidence: F12 sends an OPTIONS preflight from the configured allowed origin
+requesting that header; the response does not grant it.
+
+Fix: add x-assay-watch-secret to the CORS allowlist and exercise an actual
+browser preflight plus authenticated GET/DELETE in regression coverage.
+
+DEPENDENCIES — ADVISORIES, NOT DEMONSTRATED APP EXPLOITS
+
+pnpm audit reports two high-severity transitive advisories:
+
+1. @x402/core -> zod 3.25.76:
+   GHSA-mrhx-c7xc-m3w5, oversized collection validation / memory exhaustion.
+   https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
+   Registry reports patched >=4.6.6. Direct application zod is already 4.6.7.
+   Do not force a major-version override without checking x402 compatibility.
+   Upgrade the parent dependency to a supported patched release. Reachability
+   through this application's schemas and 16 KiB body limit was not proven;
+   no exploit or advisory-version accuracy claim beyond registry output is made.
+
+2. MCP SDK -> express -> body-parser 2.3.0:
+   GHSA-27r3-jxmh-p828, compressed-body trailing-byte process crash.
+   https://github.com/advisories/GHSA-27r3-jxmh-p828
+   Registry reports patched >=2.4.0. Current MCP entry point uses stdio and does
+   not start an Express HTTP listener, so that exposure was not established.
+   Update the transitive version and reassess if HTTP transport is introduced.
+
+The separate Remesso example npm audit reported zero known vulnerabilities.
+Raw advisory outputs are saved in this directory. Advisory counts alone do not
+mean the application exposes those exploits.
+
+OTHER LIMITS AND OBSERVATIONS
+
+- The free SDK guard defaults to allowing Assay errors; the Remesso wrapper
+  defaults to blocking them. Treat that as an explicit product choice. Clients
+  needing a security gate should use fail-closed settings after F01/F10 fixes.
+- Remesso guards schedule creation only; future schedule runs, reactivation,
+  reconciliation and other clients are outside its check. Personal wallets
+  with no revenue normally get NR and are allowed by default. Neither mechanism
+  is a general-purpose fraud detector for remittances.
+- Paid score signatures are not verified locally by the guards. Their verdict
+  decisions currently rely on the configured HTTPS API. This is documented,
+  not an assertion that the deployed API has been impersonated.
+- Paid API configuration does not require an attester; check/attest can charge
+  while returning attestation:null. This is supported by current docs but should
+  be reconciled with product copy advertising a signed result for every payment.
+- Historical settlement replay uses current mutable enrichment rather than a
+  historical enrichment snapshot (verify.ts/reassess and analysis/loadContext).
+  A later registry/identity/funding change can make a legitimate old score differ.
+  This limitation is acknowledged in the trust docs. Exact reproducibility needs
+  historical/versioned enrichment and methodology information.
+- AssayRegistry trusts its signer, does not enforce a maximum lifetime or forbid
+  future issuedAt values, and keeps existing scores across attester rotation.
+  Those are signer/owner-trust and key-recovery design limits. No unauthenticated
+  signature forgery or contract ownership bypass was found in this review.
+- Funding heuristics and missing funding data are not proof of independence.
+  Unknown funding is credited as organic. Assess adversarial scoring economics
+  separately before using ratings to collateralize credit or guarantee safety.
+- No credential-shaped private keys/tokens matched the tracked-text scan used.
+  This is not a Git-history scan or a guarantee that all secret formats are absent.
+- SDK cache growth, absent SDK network deadlines, and Remesso's permanently
+  pending inflight entries deserve further availability hardening. These were
+  not counted as additional independently reproduced findings.
+
+VALIDATION RESULTS
+
+Existing TypeScript tests: 336 passed across 34 files.
+  core 80; server 213; web 24; SDK 14; MCP 5.
+Remesso: 28/28 passed after permitting a read-only Celo RPC call in one test.
+Foundry: 16/16 passed with forge test --offline, including 256 fuzz runs.
+  Ordinary forge test hit a macOS system proxy discovery panic; offline mode
+  avoided that tool issue. A signature-cache write warning did not fail tests.
+Typecheck: all five packages passed.
+Production build: non-web packages and web passed. Web required network access
+  to download its Google font; the sandboxed first attempt failed there.
+Root pnpm check: failed at lint, before its chained typecheck/tests could run.
+  20 pre-existing errors, 2 warnings, 2 informational messages. Findings include
+  tracked Remesso example formatting and pre-existing untracked film files.
+  Typechecking/tests were then run independently. Those files were left intact.
+Audit reproductions: 15/15 passed. These demonstrate defects, not repairs.
+
+Suggested repair order: F01; F02/F03; F05/F11; F06/F04; F08/F10/F09;
+then deployment-specific F07, browser F12, compatible dependency updates and
+the existing lint failures. Re-test each boundary after fixing it.
+
+RESOLUTION (9 November 2026)
+
+The reproduction tests were turned into regression tests that assert the
+repaired behaviour: apps/server/test/security.test.ts (server) and
+audit/sdk-guard.test.ts (SDK, with the real x402 client and local signing).
+Full suite after the fixes: 362 tests pass (core 80, server 236 including the
+regressions, web 24, SDK 17, MCP 5), plus 28 in the Remesso example.
+
+F01  Fixed. assayGuardClient(client) checks inside the x402 client's
+     before-signing hook, on the exact network and payTo being signed;
+     non-Celo networks and unreadable requirements are refused by default.
+     withAssayGuard keeps its probe and documents that the binding comes from
+     building its paying fetch on assayGuardClient. isAssayBlocked() detects
+     a refusal re-wrapped by @x402/fetch. assayscore 0.6.0.
+F02  Fixed. One classifier in assayscore-core covers IPv4-mapped,
+     IPv4-compatible, NAT64 and 6to4 forms plus reserved ranges; the server
+     re-exports it. Metadata and webhooks use pinnedFetch: DNS is resolved in
+     the socket's own lookup, every answer must be public, the socket connects
+     to the checked address, TLS still verifies the hostname.
+F03  Fixed. fetchWithTimeout and pinnedFetch keep the deadline until the body
+     is read; the SQD stream has a per-read stall limit.
+F04  Fixed. signed_actions (migration v12): a signed owner action is accepted
+     only if newer than the last one for that address and kind, so a replay or
+     an older message (claim, reply, owner watch) answers 409.
+F05  Fixed. An authorization signed by the paying client is recorded at its
+     price and counts against the daily cap with or without a receipt; the
+     reconciler attaches the onchain transfer to the same row.
+F06  Fixed. The CLI trusts REGISTRY_ADDRESS or Assay's mainnet registry, never
+     the file's; a file naming another registry is refused. verifyScore returns
+     "unsigned" when no trusted signature was checked.
+F07  Fixed. Forwarding headers are trusted only from a proxy we run behind:
+     Fly-Client-IP on Fly, X-Forwarded-For with TRUST_PROXY=x-forwarded-for,
+     otherwise the socket peer; values must be IP addresses.
+F08  Fixed. The analysis snapshot is rebuilt at least hourly (or if the clock
+     moves back); paid check, attest and fresh-X answer 503 while the index is
+     more than INDEX_MAX_LAG_BLOCKS (default 3600) behind the finalized head.
+F09  Not fixable in the wrapper: Remesso's requests.pay re-reads the request
+     and takes no expected recipient. Documented in the example's Known limits.
+F10  Fixed. Assay answers are validated (verdict and rating enums, subject
+     address); a null, malformed or mismatched answer goes to onAssayError,
+     never counts as a pass. The Remesso wrapper already validated.
+F11  Fixed for watches: a middleware around the payment middleware takes a
+     watch back (new: deleted with its deliveries; renewal: old expiry
+     restored) when the response is not 2xx after settlement. Not fixed for
+     fresh-X: x402 settles after the handler, so a failed settlement can cost
+     one $0.005 search, bounded by the daily X budget. Documented in TRUST.md.
+F12  Fixed. x-assay-watch-secret is in the CORS allow-list.
+
+Dependencies: not changed in this round (the advisories' reachability was not
+shown; the MCP server has no HTTP listener). Revisit with the parent packages.

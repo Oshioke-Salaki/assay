@@ -140,12 +140,14 @@ npm install assayscore
 ```
 
 ```ts
-import { createAssay, withAssayGuard } from "assayscore";
+import { assayGuardClient, createAssay, withAssayGuard } from "assayscore";
 
 const assay = createAssay(); // the public API; pass { baseUrl } for your own server
 const { check } = await assay.address("0xSeller");
 
-const guarded = withAssayGuard(fetch, payingFetch, { minRating: "BB" });
+// Checks the seller inside the x402 client, on the exact address it is about to sign for.
+const client = assayGuardClient(x402ClientWithYourWallet, { minRating: "BB" });
+const guarded = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), { minRating: "BB" });
 ```
 
 The package README has the full guard options: [packages/sdk/README.md](../packages/sdk/README.md).

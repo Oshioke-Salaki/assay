@@ -83,6 +83,11 @@ export class Analysis {
   constructor(
     private readonly db: DB,
     private readonly minIntervalMs = 10_000,
+    /**
+     * Rebuild at least this often even when nothing invalidated it, so a score's "now" (its
+     * issuedAt, dormancy, and the expiry of a signed score) never trails the clock by more.
+     */
+    private readonly maxAgeMs = 60 * 60_000,
   ) {}
 
   invalidate(): void {
@@ -91,7 +96,9 @@ export class Analysis {
 
   current(): Snapshot {
     const s = this.snapshot;
-    const due = !s || (this.stale && Date.now() - s.builtAt >= this.minIntervalMs);
+    const age = s ? Date.now() - s.builtAt : 0;
+    const clockMovedBack = age < 0;
+    const due = !s || clockMovedBack || ((this.stale || age >= this.maxAgeMs) && age >= this.minIntervalMs);
     if (due && !this.building) {
       this.building = true;
       try {

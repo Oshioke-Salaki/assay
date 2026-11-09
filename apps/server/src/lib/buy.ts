@@ -78,13 +78,22 @@ export function createPayingFetch(opts: {
     return (
       opts.db
         .prepare(
-          "SELECT COALESCE(SUM(usd), 0) AS s FROM paid_calls WHERE ts >= ? AND tx_hash IS NOT NULL AND service = ?",
+          // Every authorization handed out counts, settled or not: a payment whose receipt never came
+          // back can still settle, so it is held against the cap until the reconciler sees the chain.
+          "SELECT COALESCE(SUM(usd), 0) AS s FROM paid_calls WHERE ts >= ? AND service = ?",
         )
         .get(since, opts.service) as {
         s: number;
       }
     ).s;
   };
+
+  // Set when the x402 client signs a payment authorization during the current call. Calls run one
+  // at a time (the serial lock), so one flag per paying fetch is enough.
+  let authorized = false;
+  client.onAfterPaymentCreation(async () => {
+    authorized = true;
+  });
 
   const serial = opts.lock ?? serialLock();
 
@@ -97,6 +106,7 @@ export function createPayingFetch(opts: {
       throw new BudgetExceeded(spent, opts.dailyCapUsd);
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     let res: Response;
+    authorized = false;
     try {
       res = await paying(input, init);
     } catch (err) {
@@ -109,10 +119,12 @@ export function createPayingFetch(opts: {
         opts.service,
         url.slice(0, 300),
         0,
-        0,
+        authorized ? opts.pricePerCallUsd : 0,
         null,
         account.address.toLowerCase(),
-        reason,
+        authorized
+          ? `${reason} (authorization sent; held against the cap until reconciled)`.slice(0, 300)
+          : reason,
       );
       log.warn("paid service call failed", { service: opts.service, reason });
       throw err;
@@ -123,10 +135,14 @@ export function createPayingFetch(opts: {
       opts.service,
       url.slice(0, 300),
       res.status,
-      tx ? opts.pricePerCallUsd : 0,
+      tx || authorized ? opts.pricePerCallUsd : 0,
       tx,
       account.address.toLowerCase(),
-      res.ok ? null : `HTTP ${res.status}`,
+      tx || !authorized
+        ? res.ok
+          ? null
+          : `HTTP ${res.status}`
+        : `${res.ok ? "" : `HTTP ${res.status}; `}no settlement receipt (held against the cap until reconciled)`,
     );
     if (tx) log.info("paid service call", { service: opts.service, usd: opts.pricePerCallUsd, tx });
     return res;

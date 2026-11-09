@@ -1,5 +1,5 @@
 import type { PublicClient } from "viem";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Analysis } from "../src/analysis.js";
 import { createApp } from "../src/api/app.js";
 import { redactUrls } from "../src/api/stats.js";
@@ -225,6 +225,10 @@ describe("GET /v1/stats", () => {
 });
 
 describe("GET /v1/admin", () => {
+  // These callers are told apart by X-Forwarded-For, as behind a proxy we run (TRUST_PROXY).
+  beforeEach(() => vi.stubEnv("TRUST_PROXY", "x-forwarded-for"));
+  afterEach(() => vi.unstubAllEnvs());
+
   const ADMIN = "a".repeat(40);
   const rpc = {
     getBalance: vi.fn(async () => 2n * 10n ** 18n),

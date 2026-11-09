@@ -1,6 +1,6 @@
 import { dayOf, tokenByAddress } from "assayscore-core";
 import type { PublicClient } from "viem";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Watches } from "../src/alerts.js";
 import { Analysis } from "../src/analysis.js";
 import { checkWithX, createApp, createWatch } from "../src/api/app.js";
@@ -251,6 +251,10 @@ describe("free API", () => {
 });
 
 describe("rate limiting", () => {
+  // These callers are told apart by X-Forwarded-For, as behind a proxy we run (TRUST_PROXY).
+  beforeEach(() => vi.stubEnv("TRUST_PROXY", "x-forwarded-for"));
+  afterEach(() => vi.unstubAllEnvs());
+
   it("answers 429 with retry-after once the free budget is spent", async () => {
     const { app } = build({ FREE_RATE_PER_MIN: "2" });
     const h = { "x-forwarded-for": "203.0.113.9" };

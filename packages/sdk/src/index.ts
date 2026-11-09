@@ -307,6 +307,15 @@ export class AssayBlockedError extends Error {
   }
 }
 
+/**
+ * True when `err` is Assay refusing a seller: an AssayBlockedError, or the same refusal re-wrapped
+ * by @x402/fetch ("Failed to create payment payload: Assay blocked payment to 0x...").
+ */
+export function isAssayBlocked(err: unknown): boolean {
+  if (err instanceof AssayBlockedError) return true;
+  return err instanceof Error && /Assay blocked payment to 0x[0-9a-fA-F]{40}/.test(err.message);
+}
+
 export interface GuardOptions {
   /** Assay client used for checks (its free address endpoint). Default: one for `baseUrl`. */
   assay?: AssayClient;
@@ -316,65 +325,174 @@ export interface GuardOptions {
   minRating?: Exclude<Rating, "NR">;
   /** Let unrated (thin file) sellers through. Default true: new sellers have to start somewhere. */
   allowUnrated?: boolean;
-  /** What to do if Assay itself is unreachable. Default "allow" (fail open). */
+  /**
+   * What to do when Assay cannot give a valid answer: unreachable, an error, or a malformed or
+   * unknown verdict. Default "allow" (fail open); use "block" for a hard gate.
+   */
   onAssayError?: "allow" | "block";
   /** Cache verdicts for this long. Default 10 minutes. */
   cacheMs?: number;
-  /** Called for every decision, for logs and dashboards. */
+  /** Addresses kept in the verdict cache. Default 5000. */
+  maxCached?: number;
+  /**
+   * assayGuardClient only: payments on networks other than Celo mainnet, which Assay does not
+   * rate. Default "block".
+   */
+  otherNetworks?: "allow" | "block";
+  /** Called for every decision, for logs and dashboards. Errors thrown here are ignored. */
   onDecision?: (d: { payTo: Address; allowed: boolean; result: CheckResult | null; error?: unknown }) => void;
+}
+
+const CELO_NETWORK = "eip155:42220";
+const VERDICTS = new Set(["pass", "caution", "block"]);
+const monotonic = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+/** Assay's answer for `payTo`, or an AssayError when it is missing, malformed or about another address. */
+function validCheck(report: unknown, payTo: Address): CheckResult {
+  const r = (report as { check?: unknown } | null)?.check as Partial<CheckResult> | null | undefined;
+  if (
+    !r ||
+    typeof r !== "object" ||
+    typeof r.verdict !== "string" ||
+    !VERDICTS.has(r.verdict) ||
+    typeof r.rating !== "string" ||
+    !(r.rating in RATING_CODES) ||
+    (r.address !== undefined && String(r.address).toLowerCase() !== payTo)
+  ) {
+    throw new AssayError(0, "bad_response", `Assay returned no valid verdict for ${payTo}`);
+  }
+  return { ...r, reasons: Array.isArray(r.reasons) ? r.reasons : [] } as CheckResult;
+}
+
+/**
+ * The shared decision: resolves when `payTo` may be paid, throws AssayBlockedError when Assay does
+ * not clear it, and applies `onAssayError` when Assay cannot answer validly.
+ */
+function makeGuard(opts: GuardOptions, plainFetch?: Fetch) {
+  const assay = opts.assay ?? createAssay({ baseUrl: opts.baseUrl, fetch: plainFetch });
+  const cacheMs = opts.cacheMs ?? 10 * 60_000;
+  const maxCached = opts.maxCached ?? 5000;
+  const cache = new Map<Address, { at: number; result: CheckResult }>();
+  const report = (d: Parameters<NonNullable<GuardOptions["onDecision"]>>[0]) => {
+    try {
+      opts.onDecision?.(d);
+    } catch {
+      // a logging callback must not decide a payment
+    }
+  };
+
+  const verdict = async (payTo: Address): Promise<CheckResult> => {
+    const hit = cache.get(payTo);
+    if (hit) {
+      const age = monotonic() - hit.at;
+      if (age >= 0 && age < cacheMs) return hit.result;
+      cache.delete(payTo);
+    }
+    const result = validCheck(await assay.address(payTo), payTo);
+    if (cacheMs > 0 && maxCached > 0) {
+      cache.set(payTo, { at: monotonic(), result });
+      while (cache.size > maxCached) cache.delete(cache.keys().next().value as Address);
+    }
+    return result;
+  };
+
+  const allowed = (r: CheckResult): boolean => {
+    if (r.verdict !== "pass" && r.verdict !== "caution") return false;
+    if (r.rating === "NR") return opts.allowUnrated ?? true;
+    if (opts.minRating && !(RATING_CODES[r.rating] >= RATING_CODES[opts.minRating])) return false;
+    return true;
+  };
+
+  /** Throws unless `payTo` may be paid. */
+  const check = async (payTo: Address): Promise<void> => {
+    let result: CheckResult;
+    try {
+      result = await verdict(payTo);
+    } catch (error) {
+      const ok = (opts.onAssayError ?? "allow") === "allow";
+      report({ payTo, allowed: ok, result: null, error });
+      if (!ok) throw error;
+      return;
+    }
+    const ok = allowed(result);
+    report({ payTo, allowed: ok, result });
+    if (!ok) throw new AssayBlockedError(payTo, result);
+  };
+
+  /** No payTo could be read from a payment challenge: treated as Assay being unable to answer. */
+  const unreadable = (where: string): void => {
+    const error = new AssayError(0, "no_pay_to", `${where} names no payTo address Assay can check`);
+    const ok = (opts.onAssayError ?? "allow") === "allow";
+    report({ payTo: "0x0000000000000000000000000000000000000000", allowed: ok, result: null, error });
+    if (!ok) throw error;
+  };
+
+  return { check, unreadable };
+}
+
+/** The part of an x402 client this needs: its before-signing hook (x402Client from @x402/core or @x402/fetch). */
+interface HookableClient {
+  onBeforePaymentCreation(
+    hook: (context: {
+      selectedRequirements: { network: string; payTo: string };
+      // biome-ignore lint/suspicious/noConfusingVoidType: mirrors x402's own BeforePaymentCreationHook type
+    }) => Promise<void | { abort: true; reason: string }>,
+  ): unknown;
+}
+
+/**
+ * Make an x402 client check every seller with Assay at the moment it signs a payment, against the
+ * exact requirements it is about to sign. This binds the check to the payment: a seller cannot
+ * show one address to the check and another to the signer.
+ *
+ *   const client = assayGuardClient(new x402Client().register(...), { minRating: "BB" });
+ *   const pay = wrapFetchWithPayment(fetch, client);   // refuses before signing
+ *
+ * @x402/fetch re-wraps errors from the client in a plain Error, so test a refusal with
+ * {@link isAssayBlocked} rather than `instanceof AssayBlockedError`.
+ * Payments on other networks are refused unless `otherNetworks: "allow"`; Assay rates Celo.
+ */
+export function assayGuardClient<C extends HookableClient>(client: C, opts: GuardOptions = {}): C {
+  const guard = makeGuard(opts);
+  client.onBeforePaymentCreation(async ({ selectedRequirements: r }) => {
+    if (r.network !== CELO_NETWORK) {
+      if ((opts.otherNetworks ?? "block") === "allow") return;
+      throw new AssayError(0, "unsupported_network", `Assay rates Celo mainnet only, not ${r.network}`);
+    }
+    if (typeof r.payTo !== "string" || !isAddress(r.payTo)) {
+      guard.unreadable("The payment requirements");
+      return;
+    }
+    await guard.check(r.payTo.toLowerCase() as Address);
+  });
+  return client;
 }
 
 /**
  * Wrap an x402-paying fetch so it checks the seller with Assay before any money moves.
  *
+ *   const client = assayGuardClient(new x402Client().register(...));
  *   const guarded = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), { minRating: "BB" });
  *   await guarded("https://seller.example/api");   // throws AssayBlockedError for wash sellers
  *
- * The first request goes out unpaid. If the seller answers 402, every `payTo` it
- * offers is checked; only if all pass does the request go through the paying fetch.
- * Non-402 responses are returned untouched and nothing is paid. A 402 that names
- * no payTo cannot be checked and is passed to the paying fetch. Request bodies must
- * be replayable (strings, Blobs, FormData or a Request object), since the request is sent twice.
+ * The first request goes out unpaid. If the seller answers 402, every `payTo` it offers is checked;
+ * only if all pass does the request go through the paying fetch. The paying fetch makes its own
+ * request and signs whatever that answer asks for, so on its own this probe cannot stop a seller
+ * that shows a different address the second time: build the paying fetch from
+ * {@link assayGuardClient}, as above, and the signer checks the address it actually pays.
+ * Non-402 responses are returned untouched and nothing is paid. A 402 that names no readable payTo
+ * is treated as Assay being unable to answer (see `onAssayError`). Request bodies must be
+ * replayable (strings, Blobs, FormData or a Request object), since the request is sent twice.
  */
 export function withAssayGuard(plainFetch: Fetch, payingFetch: Fetch, opts: GuardOptions = {}): Fetch {
-  const assay = opts.assay ?? createAssay({ baseUrl: opts.baseUrl, fetch: plainFetch });
-  const cacheMs = opts.cacheMs ?? 10 * 60_000;
-  const cache = new Map<Address, { at: number; result: CheckResult }>();
-
-  const decide = async (payTo: Address): Promise<CheckResult | null> => {
-    const hit = cache.get(payTo);
-    if (hit && Date.now() - hit.at < cacheMs) return hit.result;
-    const report = await assay.address(payTo);
-    cache.set(payTo, { at: Date.now(), result: report.check });
-    return report.check;
-  };
-
-  const allowed = (r: CheckResult): boolean => {
-    if (r.verdict === "block") return false;
-    if (r.rating === "NR") return opts.allowUnrated ?? true;
-    if (opts.minRating && RATING_CODES[r.rating] < RATING_CODES[opts.minRating]) return false;
-    return true;
-  };
-
+  const guard = makeGuard(opts, plainFetch);
   const guarded = async (input: FetchInput, init?: RequestInit): Promise<Response> => {
     const replayable = input instanceof Request ? input.clone() : input;
     const probe = await plainFetch(input, init);
     if (probe.status !== 402) return probe;
     const payTos = await readPayTos(probe);
-    for (const payTo of payTos) {
-      let result: CheckResult | null = null;
-      try {
-        result = await decide(payTo);
-      } catch (error) {
-        const ok = (opts.onAssayError ?? "allow") === "allow";
-        opts.onDecision?.({ payTo, allowed: ok, result: null, error });
-        if (!ok) throw error;
-        continue;
-      }
-      const ok = result ? allowed(result) : true;
-      opts.onDecision?.({ payTo, allowed: ok, result });
-      if (!ok && result) throw new AssayBlockedError(payTo, result);
-    }
+    if (payTos.length === 0) guard.unreadable("The 402 response");
+    for (const payTo of payTos) await guard.check(payTo);
     return payingFetch(replayable, init);
   };
   return guarded as Fetch;

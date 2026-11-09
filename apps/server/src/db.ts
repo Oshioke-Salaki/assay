@@ -269,6 +269,18 @@ const MIGRATIONS: string[] = [
        OR address IN (SELECT payer FROM pair_days UNION SELECT payee FROM pair_days);
   CREATE INDEX funding_attributed ON funding (attributed) WHERE attributed = 0;
   `,
+  // v12 (audit of 7 Nov 2026): the latest signed owner action accepted per address and kind, so a
+  // signed message is used once and an older one can never roll a newer one back.
+  `
+  CREATE TABLE signed_actions (
+    address TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    issued_at INTEGER NOT NULL,
+    nonce TEXT NOT NULL,
+    accepted_at INTEGER NOT NULL,
+    PRIMARY KEY (address, kind)
+  );
+  `,
 ];
 
 export function openDatabase(path: string): DB {

@@ -1,6 +1,7 @@
 import { type Address, type ClaimFields, claimMessage, validateClaim } from "assayscore-core";
 import { type PublicClient, verifyMessage } from "viem";
 import type { DB } from "./db.js";
+import { acceptSigned, REPLAYED } from "./lib/signed.js";
 
 /** How long a signed claim stays valid, so a captured signature cannot be replayed later. */
 const CLAIM_TTL = 10 * 60;
@@ -61,7 +62,7 @@ export function readClaims(db: DB): Map<string, Claim> {
 export type ClaimOutcome =
   | { ok: true; action: "claim"; claim: Claim }
   | { ok: true; action: "release" }
-  | { ok: false; status: 400 | 401; error: string };
+  | { ok: false; status: 400 | 401 | 409; error: string };
 
 /**
  * Apply a signed claim. The signature must recover to the claimed address (an EOA), or verify
@@ -102,6 +103,9 @@ export async function applyClaim(
     }
   }
   if (!good) return { ok: false, status: 401, error: "The signature does not match this address." };
+  // Used once, and never older than the last claim or release accepted for this address.
+  if (!acceptSigned(db, { address: f.address, kind: "claim", issuedAt: f.issuedAt, nonce: f.nonce }, now))
+    return { ok: false, status: 409, error: REPLAYED };
   if (f.action === "release") {
     db.prepare("DELETE FROM claims WHERE address = ?").run(f.address);
     return { ok: true, action: "release" };

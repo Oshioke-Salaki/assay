@@ -76,10 +76,11 @@ curl -s https://api.assayscore.xyz/v1/address/0x53aa8c3ed977f5540b070703785726e5
 Shot: switch to Claude Code (or any MCP client) and ask: "Should I pay 0x53aa… for weather data?" Let the `assay_check_seller` tool answer. If this is awkward on camera, show the SDK snippet instead:
 
 ```ts
-const pay = withAssayGuard(fetch, payingFetch, { minRating: "BB" });
+const client = assayGuardClient(x402Client, { minRating: "BB" });
+const pay = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), { minRating: "BB" });
 ```
 
-> With the SDK, a blocked seller is never paid.
+> With the SDK, your agent never signs a payment to a seller Assay blocks.
 
 ## 2:00–2:25 · Sellers and the directory (tab 5)
 

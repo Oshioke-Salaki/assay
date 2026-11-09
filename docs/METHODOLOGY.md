@@ -111,7 +111,7 @@ Every ERC-8004 review on Celo is tiered: **payment proven** when its feedback fi
 
 ## Changes from the October 2026 audit
 
-Savant.Chat audited the funding trace and the scoring code on 30 Oct 2026 and found five defects. Each was reproduced with a failing test before it was fixed, and rows the defects had already written were repaired, not just new ones. Version 2026.10-4.
+Savant.Chat ran an automated audit of the funding trace and the scoring code on 30 Oct 2026 and found five defects. Each was reproduced with a failing test before it was fixed, and rows the defects had already written were repaired, not just new ones. Version 2026.10-4.
 
 - **A cached profile outranked x402 participation.** A wallet profiled as public before its first x402 payment stayed public for the life of its cached profile, so a seller's batch send through a contract could keep the contract as the funder. Participation is now checked first, in the funding trace and in the score itself (above). Fundings recorded under the old order are attributed again.
 - **Zero-value transfers counted as funding.** Fixed as above. Rows whose stored first funding was a zero-value transfer are found by running the scan both ways, and replaced.

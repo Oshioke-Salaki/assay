@@ -71,7 +71,7 @@ export class SqdClient {
       });
       if (res.status === 204) return; // nothing finalized past `from` yet
       let last = -1;
-      for await (const block of parseNdjson<SqdBlock>(res)) {
+      for await (const block of parseNdjson<SqdBlock>(res, this.opts.timeoutMs ?? 120_000)) {
         last = block.header.number;
         yield block;
       }
@@ -110,19 +110,43 @@ export class SqdClient {
   }
 }
 
-async function* parseNdjson<T>(res: Response): AsyncGenerator<T> {
+/**
+ * NDJSON lines from a streamed body. The request timeout only covers the headers, so each read
+ * here has its own limit: a stream that goes silent for `idleMs` is cancelled and throws, and the
+ * caller retries, instead of the indexer waiting on it forever.
+ */
+async function* parseNdjson<T>(res: Response, idleMs: number): AsyncGenerator<T> {
   if (!res.body) return;
+  const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let newline = buffer.indexOf("\n");
-    while (newline >= 0) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line) yield JSON.parse(line) as T;
-      newline = buffer.indexOf("\n");
+  try {
+    for (;;) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const idle = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`SQD stream stalled for ${idleMs} ms`)), idleMs);
+      });
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        chunk = await Promise.race([reader.read(), idle]);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line) yield JSON.parse(line) as T;
+        newline = buffer.indexOf("\n");
+      }
     }
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    throw err;
+  } finally {
+    reader.releaseLock();
   }
   buffer += decoder.decode();
   const rest = buffer.trim();

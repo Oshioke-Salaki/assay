@@ -10,25 +10,40 @@ npm install assayscore
 
 ## Guard your agent's payments
 
-`withAssayGuard` wraps any x402-paying fetch. The first request goes out unpaid; if the seller answers 402, every `payTo` it names is checked with Assay, and only if all pass does the paid request go out. A blocked seller throws `AssayBlockedError` and is never paid.
+`assayGuardClient` makes your x402 client check the seller with Assay **at the moment it signs**, against the exact address and network it is about to pay. A seller Assay does not clear is never signed for. Wrap the paying fetch in `withAssayGuard` too, and a blocked seller is refused before any paid request is sent at all.
 
 ```ts
-import { withAssayGuard, AssayBlockedError } from "assayscore";
+import { assayGuardClient, withAssayGuard, isAssayBlocked } from "assayscore";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
 
-const client = new x402Client().register("eip155:42220", new ExactEvmScheme(privateKeyToAccount(KEY)));
-const pay = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), { minRating: "BB" });
+const opts = { minRating: "BB" } as const;
+const client = assayGuardClient(
+  new x402Client().register("eip155:42220", new ExactEvmScheme(privateKeyToAccount(KEY))),
+  opts,
+);
+const pay = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), opts);
 
 try {
   const res = await pay("https://seller.example/api");
 } catch (err) {
-  if (err instanceof AssayBlockedError) console.log(err.result.reasons);
+  if (isAssayBlocked(err)) console.log("not paid:", (err as Error).message);
 }
 ```
 
-Options: `minRating` (lowest rating to pay, default: only `block` verdicts stop a payment), `allowUnrated` (default `true`, new sellers have to start somewhere), `onAssayError` (`"allow"` or `"block"` when Assay is unreachable, default `"allow"`), `cacheMs` (default 10 minutes), `onDecision` (a callback for logs), `baseUrl` (default: the public Assay API).
+Why both. `withAssayGuard` sends the request unpaid first and checks every `payTo` the seller's 402 names. The paying fetch then makes its own request and signs whatever *that* answer asks for, so a seller could show one address to the probe and another to the signer. `assayGuardClient` closes that gap: the check runs inside the client's before-signing hook, on the requirements it will sign. Use `assayGuardClient` alone if you do not want the extra unpaid request.
+
+`withAssayGuard` throws `AssayBlockedError`. @x402/fetch re-wraps errors from the client in a plain `Error`, so test refusals with `isAssayBlocked(err)`.
+
+Options (both functions):
+- `minRating`: the lowest rating to pay. Default: only `block` verdicts stop a payment.
+- `allowUnrated` (default `true`): pay sellers with too little history to rate. New sellers have to start somewhere.
+- `onAssayError` (`"allow"` or `"block"`, default `"allow"`): what to do when Assay cannot give a valid answer. That covers an unreachable Assay, an error, a malformed or unknown verdict, an answer about another address, or a 402 with no readable `payTo`. Use `"block"` for a hard gate.
+- `otherNetworks` (`assayGuardClient` only, default `"block"`): payments on networks other than Celo mainnet, which Assay does not rate.
+- `cacheMs` (default 10 minutes) and `maxCached` (default 5000).
+- `onDecision`: a callback for logs. Errors it throws are ignored.
+- `baseUrl` (default: the public Assay API).
 
 The guard uses Assay's free endpoint, so it costs nothing.
 

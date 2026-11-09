@@ -11,6 +11,7 @@ import {
 } from "assayscore-core";
 import type { DB } from "./db.js";
 import { readXMentions, type XMentions } from "./enrich/xmentions.js";
+import { pinnedFetch } from "./lib/http.js";
 import { log } from "./lib/log.js";
 
 /**
@@ -111,7 +112,18 @@ export class Watches {
     private readonly analysis: { assess: (a: Address) => Assessment },
     private readonly opts: WatchesOptions = {},
   ) {
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // By default deliveries connect only to the address that passed the private-address check
+    // (pinnedFetch), so a receiver cannot rebind its DNS to an internal address between the check
+    // below and the connection.
+    this.fetchImpl =
+      opts.fetchImpl ??
+      (((url: string, init: RequestInit) =>
+        pinnedFetch(String(url), {
+          method: init.method,
+          headers: init.headers as Record<string, string>,
+          body: typeof init.body === "string" ? init.body : undefined,
+          timeoutMs: DELIVERY_TIMEOUT_MS,
+        })) as unknown as typeof fetch);
     this.lookup = opts.lookup ?? ((host) => dnsLookup(host, { all: true }));
   }
 
@@ -132,7 +144,14 @@ export class Watches {
     now = nowSec(),
     opts: { days?: number; note?: string | null; maxForAddress?: number } = {},
   ):
-    | { ok: true; id: string; secret: string | null; expiresAt: number; renewed: boolean }
+    | {
+        ok: true;
+        id: string;
+        secret: string | null;
+        expiresAt: number;
+        renewed: boolean;
+        previousExpiresAt?: number;
+      }
     | { ok: false; status: 400 | 429; error: string } {
     const problem = Watches.urlProblem(url);
     if (problem) return { ok: false, status: 400, error: problem };
@@ -146,7 +165,14 @@ export class Watches {
     if (existing) {
       const expiresAt = Math.max(existing.expires_at, now) + days * DAY;
       this.db.prepare("UPDATE watches SET expires_at = ? WHERE id = ?").run(expiresAt, existing.id);
-      return { ok: true, id: existing.id, secret: null, expiresAt, renewed: true };
+      return {
+        ok: true,
+        id: existing.id,
+        secret: null,
+        expiresAt,
+        renewed: true,
+        previousExpiresAt: existing.expires_at,
+      };
     }
     if (opts.maxForAddress !== undefined) {
       const mine = (
@@ -381,6 +407,7 @@ export class Watches {
         body,
         signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
       });
+      await res.body?.cancel().catch(() => {}); // the receiver's answer is not read
       if (res.status >= 200 && res.status < 300) return { ok: true, status: res.status };
       if (res.status >= 300 && res.status < 400)
         return { ok: false, status: res.status, error: "redirects are not followed" };
@@ -391,6 +418,24 @@ export class Watches {
         error: String(err instanceof Error ? (err.name === "TimeoutError" ? "timed out" : err.message) : err),
       };
     }
+  }
+
+  /**
+   * Take back a create() whose payment did not settle: a new watch is removed with its queued
+   * deliveries, a renewal goes back to its previous expiry (unless something changed it since).
+   */
+  revert(out: { id: string; renewed: boolean; expiresAt: number; previousExpiresAt?: number }): void {
+    if (out.renewed) {
+      if (out.previousExpiresAt !== undefined)
+        this.db
+          .prepare("UPDATE watches SET expires_at = ? WHERE id = ? AND expires_at = ?")
+          .run(out.previousExpiresAt, out.id, out.expiresAt);
+      return;
+    }
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM watch_deliveries WHERE watch_id = ?").run(out.id);
+      this.db.prepare("DELETE FROM watches WHERE id = ?").run(out.id);
+    })();
   }
 
   /** Drop old deliveries and watches that expired long ago. */

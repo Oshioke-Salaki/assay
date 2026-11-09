@@ -167,25 +167,28 @@ const { verdict, rating, reasons, attestation } = await res.json();
 
         <Panel title="SDK guard" id="guard">
           <p>
-            <code>withAssayGuard</code> wraps any x402 paying fetch. When a seller answers 402, every{" "}
-            <code>payTo</code> it offers is checked first; a blocked seller throws{" "}
-            <code>AssayBlockedError</code> and nothing is paid. Responses that are not 402 pass through
-            untouched.
+            <code>assayGuardClient</code> makes your x402 client check the seller at the moment it signs,
+            against the exact address and network it is about to pay, so a seller Assay does not clear is
+            never signed for. <code>withAssayGuard</code> adds a check before the paid request is sent at all.
+            Use both: a seller cannot show one address to the check and another to the signer.
           </p>
           <Code label="Guarding an x402 client">{`
-import { withAssayGuard, AssayBlockedError } from "assayscore";
+import { assayGuardClient, withAssayGuard, isAssayBlocked } from "assayscore";
+import { wrapFetchWithPayment } from "@x402/fetch";
 
 // npm install assayscore
-const guarded = withAssayGuard(fetch, pay, {
+const opts = {
   minRating: "BB",        // optional: refuse anything rated below BB
   allowUnrated: true,     // new sellers have to start somewhere
-  onAssayError: "allow",  // fail open if Assay is unreachable; "block" to fail closed
-});
+  onAssayError: "allow",  // fail open if Assay can't answer; "block" to fail closed
+};
+const client = assayGuardClient(yourX402Client, opts);   // checks before it signs
+const guarded = withAssayGuard(fetch, wrapFetchWithPayment(fetch, client), opts);
 
 try {
   await guarded("https://seller.example/api/forecast");
 } catch (e) {
-  if (e instanceof AssayBlockedError) console.log(e.result.reasons);
+  if (isAssayBlocked(e)) console.log("not paid:", e.message);
 }
           `}</Code>
         </Panel>
@@ -252,7 +255,8 @@ function payOut(address seller) external {
           <Code label="Verify a signed score from your own node">{`
 pnpm --filter @assay/server verify check.json          # the JSON a paid check returned
 pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegistry
-# VERIFIED: the signature is Assay's and your node computes the same score.
+# VERIFIED: the signature is from the attester your registry trusts, and your node computes the same score.
+# The registry is yours to choose (default: Assay's mainnet AssayRegistry), never the file's.
           `}</Code>
           <p>
             Settlements, which decide gross revenue, are onchain facts every node agrees on. Funding, Self and
@@ -269,11 +273,14 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             override.
           </p>
           <p>
-            <strong>Audited.</strong> Savant.Chat audited the funding trace and the scoring code on 30 Oct
-            2026 and found five defects, two rated high. All five were reproduced with a failing test, fixed,
-            and the data they had already written repaired, in method 2026.10-4. One fix lowered real ratings:
-            wallets created just before paying a seller now count half, as the method always said. The list is
-            in{" "}
+            <strong>Two automated audits.</strong> Savant.Chat ran an automated audit of the funding trace and
+            the scoring code on 30 Oct 2026 and found five defects, two rated high. All five were reproduced
+            with a failing test, fixed, and the data they had already written repaired, in method 2026.10-4.
+            One fix lowered real ratings: wallets created just before paying a seller now count half, as the
+            method always said. A second automated audit, of the whole repository on 7 Nov 2026, found twelve
+            issues in the API, the SDK guard and <code>verify</code>. Ten are fixed in full and one in part,
+            each with a regression test, and the twelfth is a documented limit of Remesso&rsquo;s SDK. Both
+            reviewers were AI, not a human audit firm. The October list is in{" "}
             <a
               className="link"
               href="https://github.com/Oshioke-Salaki/assay/blob/main/docs/METHODOLOGY.md#changes-from-the-october-2026-audit"
@@ -323,8 +330,10 @@ pnpm --filter @assay/server verify --onchain 0xSeller   # the score in AssayRegi
             </dd>
             <dt>Who checked Assay?</dt>
             <dd>
-              Savant.Chat audited the funding trace and scoring code on 30 Oct 2026; all five findings are
-              fixed (above). The code is open, and Assay rates itself by the same rules on{" "}
+              Two automated (AI) audits: Savant.Chat on the funding trace and scoring code on 30 Oct 2026, all
+              five findings fixed, and one of the whole repository on 7 Nov 2026, with ten of twelve findings
+              fixed in full and one in part (above). The code is open, and Assay rates itself by the same rules
+              on{" "}
               <Link href="/stats">/stats</Link>.
             </dd>
           </dl>

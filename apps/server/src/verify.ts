@@ -181,7 +181,12 @@ export function compare(signed: ScoreFields, again: ScoreFields): FieldCheck[] {
   ];
 }
 
-export type VerifyOutcome = "verified" | "differs" | "signature-invalid" | "node-behind";
+/**
+ * verified: a trusted signature was checked and the replay matches. unsigned: the replay matches,
+ * but no signature from a trusted attester was checked, so this proves the arithmetic, not who
+ * signed it. The others say what went wrong.
+ */
+export type VerifyOutcome = "verified" | "unsigned" | "differs" | "signature-invalid" | "node-behind";
 
 export interface VerifyReport {
   outcome: VerifyOutcome;
@@ -230,8 +235,8 @@ export async function verifyScore(
   } else if (input.signature && input.registry) {
     checked = true;
     recovered = await recoverSigner(f, input.signature, input.registry);
-    valid = recovered !== null && (expected ? recovered === expected : null);
-    if (recovered === null) valid = false;
+    // Without an expected signer a recovered address proves nothing about who signed: unknown.
+    valid = recovered === null ? false : expected ? recovered === expected : null;
   }
   const base = {
     subject: f.subject,
@@ -278,5 +283,9 @@ export async function verifyScore(
         "Gross revenue matches, so the settlements agree. The difference comes from enrichment: who funded each payer (traced from public transfers), Self proofs or ERC-8004 registrations. A node that traced an address at a different time, or before a registration, can differ here.",
       );
   }
-  return { ...base, outcome: ok ? "verified" : "differs", fields, explain };
+  if (ok && valid !== true)
+    explain.push(
+      "The score replays from your data, but no signature from a trusted attester was checked, so this does not show that Assay issued it.",
+    );
+  return { ...base, outcome: !ok ? "differs" : valid === true ? "verified" : "unsigned", fields, explain };
 }

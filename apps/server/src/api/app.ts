@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import {
   type Address,
@@ -42,7 +43,7 @@ import {
 import type { Env } from "../env.js";
 import { BudgetExceeded } from "../lib/buy.js";
 import { log } from "../lib/log.js";
-import { signedShape, verifySigned } from "../lib/signed.js";
+import { acceptSigned, REPLAYED, signedShape, verifySigned } from "../lib/signed.js";
 import { proveSettlement } from "../proof.js";
 import { applyResponse, readResponses } from "../responses.js";
 import { classify, type Usage } from "../usage.js";
@@ -126,6 +127,8 @@ export function createApp(deps: AppDeps): Hono {
         "x-payment",
         "access-control-expose-headers",
         "authorization",
+        // Managing a watch from a browser (GET or DELETE /v1/watch/:id) sends its secret here.
+        "x-assay-watch-secret",
       ],
       exposeHeaders: ["payment-required", "payment-response", "x-payment-response"],
       maxAge: 600,
@@ -136,6 +139,18 @@ export function createApp(deps: AppDeps): Hono {
   app.use("/v1/attest/*", validateAddressParam);
   const xOnDemand = Boolean(deps.xmentions?.onDemand);
   const watchOffered = Boolean(deps.watches);
+  // x402 runs a paid handler before it settles the payment. A watch is written by its handler, so
+  // when settlement then fails (the response is not 2xx) the watch is taken back: alerts are only
+  // kept for payments that settled. Registered before the payment middleware so it runs around it.
+  const unsettled = new WeakMap<Request, () => void>();
+  app.use("/v1/watch", async (c, next) => {
+    await next();
+    const undo = unsettled.get(c.req.raw);
+    if (undo && (c.res.status < 200 || c.res.status >= 300)) {
+      undo();
+      log.warn("watch taken back: its payment did not settle", { status: c.res.status });
+    }
+  });
   app.use(
     "*",
     paidMiddleware(env, {
@@ -326,7 +341,10 @@ export function createApp(deps: AppDeps): Hono {
     const out = await applyResponse(deps.db, body, { rpc: deps.rpc });
     if (!out.ok)
       return c.json(
-        { error: out.status === 401 ? "bad_signature" : "bad_request", message: out.error },
+        {
+          error: out.status === 401 ? "bad_signature" : out.status === 409 ? "replayed" : "bad_request",
+          message: out.error,
+        },
         out.status,
       );
     claimsVersion++;
@@ -362,6 +380,13 @@ export function createApp(deps: AppDeps): Hono {
         { error: "not_claimed", message: "Claim this page first; free alerts come with a claimed page." },
         403,
       );
+    const signed = {
+      address: v.fields.address,
+      kind: "watch-own",
+      issuedAt: v.fields.issuedAt,
+      nonce: v.fields.nonce,
+    };
+    if (!acceptSigned(deps.db, signed, now)) return c.json({ error: "replayed", message: REPLAYED }, 409);
     const out = deps.watches.create(v.fields.address, v.fields.url, now, {
       days: OWNER_WATCH_DAYS,
       note: "owner",
@@ -445,7 +470,10 @@ export function createApp(deps: AppDeps): Hono {
     const out = await applyClaim(deps.db, body, { rpc: deps.rpc });
     if (!out.ok)
       return c.json(
-        { error: out.status === 401 ? "bad_signature" : "bad_request", message: out.error },
+        {
+          error: out.status === 401 ? "bad_signature" : out.status === 409 ? "replayed" : "bad_request",
+          message: out.error,
+        },
         out.status,
       );
     claimsVersion++;
@@ -559,6 +587,8 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get("/v1/check/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
+    const behind = indexBehind(deps.status);
+    if (behind) return c.json({ error: "index_behind", message: behind }, 503);
     const { assessment: a, block, now } = analysis.scored(address);
     const attestation = deps.attester ? await deps.attester.sign(a, block, now) : null;
     const x = readXMentions(deps.db, address);
@@ -601,6 +631,7 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: "bad_request", message: "Send JSON with address and url." }, 400);
     }
     const out = createWatch(deps, body);
+    if (out.undo) unsettled.set(c.req.raw, out.undo);
     return c.json(out.body, out.status);
   });
 
@@ -625,6 +656,8 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get("/v1/attest/:address", async (c) => {
     const address = normalizeAddress(c.req.param("address"));
+    const behind = indexBehind(deps.status);
+    if (behind) return c.json({ error: "index_behind", message: behind }, 503);
     const { assessment: a, block, now } = analysis.scored(address);
     const attestation = deps.attester ? await deps.attester.sign(a, block, now) : null;
     const x = readXMentions(deps.db, address);
@@ -764,7 +797,7 @@ const validateAddressParam: MiddlewareHandler = async (c, next) => {
 export function createWatch(
   deps: Pick<AppDeps, "watches">,
   body: Record<string, unknown>,
-): { status: 201 | 400 | 429 | 503; body: Record<string, unknown> } {
+): { status: 201 | 400 | 429 | 503; body: Record<string, unknown>; undo?: () => void } {
   if (!deps.watches)
     return {
       status: 503,
@@ -779,7 +812,9 @@ export function createWatch(
   const url = String(body.url ?? "").trim();
   const out = deps.watches.create(normalizeAddress(address), url);
   if (!out.ok) return { status: out.status, body: { error: "bad_request", message: out.error } };
+  const watches = deps.watches;
   return {
+    undo: () => watches.revert(out),
     status: 201,
     body: {
       id: out.id,
@@ -809,6 +844,9 @@ export async function checkWithX(
       status: 503,
       body: { error: "x_search_not_offered", message: "This Assay instance does not sell X searches." },
     };
+  // Refuse before buying the search: a lagging index would sign stale data.
+  const behind = indexBehind(deps.status);
+  if (behind) return { status: 503, body: { error: "index_behind", message: behind } };
   let got: { x: XMentions; reused: boolean };
   try {
     got = await w.fresh(address);
@@ -967,6 +1005,21 @@ export function rateLimit(perMinute: number, internalKey?: string): MiddlewareHa
   };
 }
 
+/**
+ * Why a paid, signed answer cannot be given right now, or null. A score signed from an index that
+ * has fallen far behind the chain would be paid for and carry stale data, so paid routes answer 503
+ * instead, which cancels the x402 settlement. INDEX_MAX_LAG_BLOCKS (default 3600, about an hour)
+ * sets how far behind the finalized head the settlement index may be.
+ */
+export function indexBehind(status: () => IndexStatus): string | null {
+  const s = status();
+  const maxLag = Number(process.env.INDEX_MAX_LAG_BLOCKS ?? 3600);
+  const head = s.finalizedHead ?? 0;
+  if (head > 0 && head - s.settlementsBlock > maxLag)
+    return `The index is ${head - s.settlementsBlock} blocks behind Celo. Nothing was charged; try again shortly.`;
+  return null;
+}
+
 /** Constant-time comparison, so a key cannot be guessed byte by byte from response times. */
 export function sameSecret(given: string | undefined, secret: string | undefined): boolean {
   if (!secret || !given || given.length !== secret.length) return false;
@@ -975,10 +1028,22 @@ export function sameSecret(given: string | undefined, secret: string | undefined
   return diff === 0;
 }
 
+/**
+ * Who is calling, for rate limits, admin lockouts and usage counts. Forwarding headers are trusted
+ * only from a proxy we run behind: on Fly, its edge sets Fly-Client-IP and a client cannot; behind
+ * another proxy, set TRUST_PROXY=x-forwarded-for and its last hop is used. Otherwise the socket's
+ * own peer address, so a client cannot invent a new identity by sending a header.
+ */
 function clientIp(c: Context): string {
-  // The last hop is the one our own proxy appended; earlier entries are client-supplied.
-  const forwarded = c.req.header("x-forwarded-for")?.split(",").at(-1)?.trim();
-  if (forwarded) return forwarded;
+  const trust = process.env.TRUST_PROXY ?? (process.env.FLY_APP_NAME ? "fly" : "none");
+  const valid = (ip: string | undefined) => (ip && isIP(ip) ? ip : undefined);
+  if (trust === "fly") {
+    const fly = valid(c.req.header("fly-client-ip")?.trim());
+    if (fly) return fly;
+  } else if (trust === "x-forwarded-for") {
+    const last = valid(c.req.header("x-forwarded-for")?.split(",").at(-1)?.trim());
+    if (last) return last;
+  }
   try {
     return getConnInfo(c).remote.address ?? "unknown";
   } catch {

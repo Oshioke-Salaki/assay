@@ -9,8 +9,10 @@
  * this node's database at the block and time it was signed, and compares every field. Run a node
  * first (README, "Run it"): the replay is only as complete as your index.
  *
- * Env: DATABASE_PATH (default ./data/assay.db), RPC_URL (default forno), REGISTRY_ADDRESS (default
- * the registry named in the attestation, else Assay's mainnet registry).
+ * Env: DATABASE_PATH (default ./data/assay.db), RPC_URL (default forno), REGISTRY_ADDRESS (the
+ * registry whose attester you trust; default Assay's mainnet AssayRegistry). The registry named
+ * inside an attestation is never trusted on its own say: a file naming another registry is refused
+ * unless you set REGISTRY_ADDRESS to that registry yourself.
  */
 import { readFileSync } from "node:fs";
 import { type Address, isAddress, normalizeAddress, ratingFromCode } from "assayscore-core";
@@ -67,8 +69,13 @@ async function main(): Promise<number> {
       const parsed = parseAttestation(JSON.parse(readFileSync(file, "utf8")));
       if (!parsed.signature)
         throw new Error("This file has no signature. Pass the JSON a paid check or attest returned.");
-      registry =
-        (process.env.REGISTRY_ADDRESS?.toLowerCase() as Address) || parsed.registry || MAINNET_REGISTRY;
+      // The trust root is yours to choose, never the file's.
+      registry = (process.env.REGISTRY_ADDRESS?.toLowerCase() as Address) || MAINNET_REGISTRY;
+      if (parsed.registry && parsed.registry.toLowerCase() !== registry)
+        throw new Error(
+          `This score names registry ${parsed.registry}, not the one you trust (${registry}). ` +
+            "If you trust that registry, set REGISTRY_ADDRESS to it and run again.",
+        );
       input = { fields: parsed.fields, signature: parsed.signature, registry };
     }
     const expected = (
@@ -78,7 +85,10 @@ async function main(): Promise<number> {
     if (json) console.log(JSON.stringify(r, null, 2));
     else {
       const head = {
-        verified: "VERIFIED: the signature is Assay's and your node computes the same score.",
+        verified:
+          "VERIFIED: the signature is from the attester your registry trusts, and your node computes the same score.",
+        unsigned:
+          "NUMBERS MATCH, SIGNATURE NOT CHECKED: your node computes the same score, but no trusted signature was verified.",
         differs: "DIFFERS: the signature is valid, but your node computes something else.",
         "signature-invalid":
           "SIGNATURE INVALID: this score was not signed by the attester AssayRegistry trusts.",
