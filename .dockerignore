@@ -14,3 +14,8 @@ apps/web/.taste-skill
 .claude
 .vercel
 .git
+# Not part of the API image: the launch film and its renders, the integration examples,
+# and the audit PDF. The Dockerfile copies none of them.
+film
+examples
+audit-report.pdf
